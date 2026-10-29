@@ -318,7 +318,7 @@ footer { margin-top: 32px; border-top: 2px solid var(--stone-lo); padding-top: 1
       <h2>The mage skip, step by step</h2>
       <div class="steps">
         <div class="step stone"><span class="n">1</span><div class="block" style="gap:4px"><h3>Roles</h3><p><b>You</b> are on the mage side (left) on long range, hitting the mage hand. A thrall helps, because splashes break the skip. <b>Your melee guy</b> stays on the melee side (right) and also attacks the <b>mage hand</b> from range. He must never step past his marked tile, or the head looks at the centre.</p></div></div>
-        <div class="step stone"><span class="n">2</span><div class="block" style="gap:4px"><h3>Why the head comes to you</h3><p>On the <b>null</b>, Olm doesn't attack. Its head swings toward the claw that took the most damage in the last 4 ticks. You're both hitting the mage hand, so the head comes to your side every cycle. That's why Basic 2 is yours.</p></div></div>
+        <div class="step stone"><span class="n">2</span><div class="block" style="gap:4px"><h3>Why the head comes to you</h3><p>Olm's head has <b>three positions: left, middle and right</b>. It only turns when Olm acts (every 4 ticks), it turns toward the side with the most players, and if nobody is where it's looking, it turns and loses that action. On the <b>null</b>, Olm doesn't attack. Its head swings toward the claw that took the most damage in the last 4 ticks. You're both hitting the mage hand, so the head comes to your side every cycle. That's why Basic 2 is yours.</p></div></div>
         <div class="step stone"><span class="n">3</span><div class="block" style="gap:4px"><h3>The loop: MIDDLE → RIGHT → LEFT</h3><p>You only need <b>3 tiles at the head</b>: the tile left of the head, the centre, and the tile right of the head (the pack's two head tiles plus the centre). Tank <b>Basic 2</b> on the <b>centre tile</b>. Then step <b>one tile right</b>, out of the mage-side view. When the special is due, Olm sees nobody on your side, turns its head right, and loses the special. <b>As soon as the head turns, run back LEFT.</b></p></div></div>
         <div class="step stone"><span class="n">4</span><div class="block" style="gap:4px"><h3>Setting it (start of a phase or after it breaks)</h3><p>Tank 2 basics. On the 2nd, the head must be turned <b>fully</b> to your side. Then step right, and go back left when the head turns. The skip is set. Shortcut: if a special lands while the head faces the melee side, run left and it's set. If a special lands while the head faces your side, tank one, step right, and it's set.</p></div></div>
         <div class="step stone"><span class="n">5</span><div class="block" style="gap:4px"><h3>Timing tips</h3><p>Click as soon as you see the head <i>start</i> to move; the turn has already happened. Your click takes effect on the next tick, so click one tick early. Tank Basic 2 on the middle tile so a fire wall can't trap you.</p></div></div>
@@ -329,6 +329,7 @@ footer { margin-top: 32px; border-top: 2px solid var(--stone-lo); padding-top: 1
       <div class="card stone"><span class="eyebrow">#1 mistake</span><p>Running right as soon as the head turns to you. You <b>must tank Basic 2 in the middle first</b>. If you leave early, Olm loses a basic instead and the special still comes.</p></div>
       <div class="card stone"><span class="eyebrow">It broke</span><p>You start seeing specials again (Crystal Burst, Swap, Lightning). Don't panic: look at which side the special happened on, then set it again (step 4).</p></div>
       <div class="card stone"><span class="eyebrow">Melee guy breaks it</span><p>Hitting the melee hand harder than you hit the mage hand, or stepping past his tile, makes the head go the wrong way on the null.</p></div>
+      <div class="card stone"><span class="eyebrow">Head stuck in the middle</span><p>If players bunch up near the centre, Olm faces the <b>middle</b>. For your Basic 2 the head must be turned <b>fully</b> to your side. If it looks at the middle, tank that attack and go back to your side to keep it set.</p></div>
     </div>
 
     <div class="card stone">
@@ -540,6 +541,24 @@ $('#qz-next').addEventListener('click', nextQuestion);
 const COLS = 15, ROWS = 8, TW = 48, W = COLS * TW, FLOOR_Y = 150, H = FLOOR_Y + ROWS * TW;
 const zoneOf = c => (S && S.mirror ? (c >= 7 ? 2 : 0) : (c <= 7 ? 0 : 2));   // the mage-side view reaches the centre tile under the head
 const ZONE_NAMES = ['MAGE SIDE', 'MIDDLE', 'MELEE SIDE'];
+// Olm's head has 3 positions (0 = screen-left, 1 = middle, 2 = screen-right). These are the columns it can see from each.
+function viewCols(f) {
+  const m = S && S.mirror;
+  if (f === 1) return [5, 9];
+  if (f === 0) return [0, m ? 6 : 7];
+  return [m ? 7 : 8, COLS - 1];
+}
+const sees = (f, c) => { const [a, b] = viewCols(f); return c >= a && c <= b; };
+const headTarget = f => (1 - f) * .55;
+// The head only ever turns on an Olm action tick (every 4 ticks); the swing is animated over about one tick.
+function setFacing(f, why) {
+  if (f === S.facing) return;
+  S.turn = { from: S.headAngle, at: performance.now() };
+  S.turnFlash = performance.now();
+  S.facing = f;
+  const name = f === 1 ? 'the middle' : f === S.mageSide ? 'the mage side' : 'the melee side';
+  chat(`Olm's head turns to ${name}${why ? ' (' + why + ')' : ''}.`, 'olm');
+}
 // Tile layout in the learning orientation: facing Olm, mage claw on the left, melee claw on the right.
 const LAYOUT = {
   // skipper routes: LEFT (cast) -> MIDDLE (tank basic 2, a fire wall can't trap you) -> RIGHT (out of view for the special)
@@ -646,7 +665,7 @@ function makeState(running) {
     running, paused: false, over: false, pauseAt: 0,
     mode, mirror, wheels: $('#wheels').checked,
     tickMs: 600 / +$('#speed').value, lastTickAt: performance.now(),
-    tick: 0, facing: startFacing, headAngle: (1 - startFacing) * .42,
+    tick: 0, facing: startFacing, headAngle: headTarget(startFacing), turn: null, turnFlash: 0, mouth: null,
     olmActs: 0, seenSpecial: mode !== 'set', setAt: null, opening, crippled: false, reachedLeft: !opening,
     // "Get lost & recover" drill: after a few skips something breaks the skip and the hints go away
     lost: false, lostAt: 0, nextLostAt: mode === 'recover' ? rand(36, 52) : Infinity, lostSide: null, splashUntil: 0,
@@ -833,21 +852,21 @@ function olmAct() {
   if (S.mode === 'prayer' && step === 'special') step = 'empty';
   S.olmActs++;
   [0, 2].forEach(side => { S.hands[side].hits = S.hands[side].hits.filter(k => S.tick - k.t <= 8); });
-  const counts = [0, 0, 0];
-  S.players.forEach(p => counts[zoneOf(p.c)]++);
-  const other = 2 - S.facing;
+  const counts = [0, 1, 2].map(f => S.players.filter(p => sees(f, p.c)).length);
+  let best = S.facing;   // Olm tries to face the view with the most players (ties keep the current one)
+  for (const f of [S.mageSide, 2 - S.mageSide, 1]) if (counts[f] > counts[best]) best = f;
 
   if (step === 'empty') {
     // the null: no attack, the head swings toward the most-damaged claw
     const pull = S.mode === 'prayer' ? S.mageSide : clawPull();
     if (pull !== null && pull !== S.facing) {
-      S.facing = pull;
-      if (pull === S.mageSide && S.mode !== 'prayer') { chat('Olm turns its head to the mage side.', 'olm'); if (!S.opening && S.reachedLeft) S.seenSpecial = true; }
+      setFacing(pull, 'null: most-damaged claw');
+      if (pull === S.mageSide && S.mode !== 'prayer' && !S.opening && S.reachedLeft) S.seenSpecial = true;
     }
     if (S.catchUp && counts[S.facing] > 0) { standardAttack(true); S.catchUp = false; }
   } else if (counts[S.facing] === 0) {
-    // nobody where Olm is looking: it turns to the other side and loses this action
-    if (counts[other] > 0) S.facing = other;
+    // nobody where Olm is looking: it turns toward the most players and loses this action
+    if (counts[best] > 0) setFacing(best, 'nobody in view');
     if (step === 'std') {
       S.catchUp = true;
       if (S.stepIdx % 4 === 2 && S.reachedLeft) notice('Too early: tank Basic 2 BEFORE you step right', 'bad');
@@ -873,11 +892,13 @@ function olmAct() {
     if (step === 'std') standardAttack(false);
     else if (S.hands[S.meleeSide].clench) chat('The melee hand is crippled: no special this time.', 'olm');
     else doSpecial(SPECIALS[S.specIdx++ % 3]);
+    // it still acted, but swerves if another view now holds more players
+    if (counts[best] > counts[S.facing]) setFacing(best, 'more players there');
   }
   S.stepIdx++;
 }
 
-function targetsInView() { return S.players.filter(p => zoneOf(p.c) === S.facing); }
+function targetsInView() { return S.players.filter(p => sees(S.facing, p.c)); }
 
 function standardAttack(isCatchUp) {
   const targets = targetsInView();
@@ -932,8 +953,8 @@ function landProj(pr) {
 function doSpecial(sp) {
   S.icon = { id: sp.id, until: S.tick + 3 };
   S.seenSpecial = true;
-  if (S.lost) { S.stats.lostTaken++; S.lostSide = S.facing === S.mageSide ? 'mage' : 'melee'; }
-  if (zoneOf(S.you.c) !== S.facing) {
+  if (S.lost) { S.stats.lostTaken++; S.lostSide = S.facing === S.meleeSide ? 'melee' : 'mage'; }
+  if (!sees(S.facing, S.you.c)) {
     S.stats.onMate++;
     notice(`${sp.name} on your melee guy. Count from here!`, 'info', 2400);
   } else {
@@ -1152,17 +1173,31 @@ function draw(now) {
   const g = ctx;
   g.drawImage(scene, 0, 0);
 
-  // Olm's view: the zone it is facing
-  S.headAngle += ((1 - S.facing) * .42 - S.headAngle) * .16;
-  const edge = S.mirror ? 7 : 8;   // first column of the right-hand view
-  const z0 = S.facing === 0 ? 0 : edge * TW, zw = S.facing === 0 ? edge * TW : W - edge * TW;
+  // Olm's head: eased swing toward its new position after a turn
+  const tgt = headTarget(S.facing);
+  if (S.turn) {
+    const u = Math.min(1, (now - S.turn.at) / Math.min(600, S.tickMs));
+    const e = u < .5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+    S.headAngle = S.turn.from + (tgt - S.turn.from) * e;
+    if (u >= 1) S.turn = null;
+  } else S.headAngle = tgt;
+  S.mouth = { x: HEAD.x - Math.sin(S.headAngle) * 52, y: HEAD.y + Math.cos(S.headAngle) * 52 };
+
+  // Olm's view: the columns it can see right now
+  const [vc0, vc1] = viewCols(S.facing);
+  const z0 = vc0 * TW, zw = (vc1 - vc0 + 1) * TW;
   g.fillStyle = 'rgba(255,214,64,.10)'; g.fillRect(z0, FLOOR_Y, zw, H - FLOOR_Y);
   g.strokeStyle = 'rgba(255,214,64,.5)'; g.lineWidth = 2; g.setLineDash([8, 6]);
   g.strokeRect(z0 + 1, FLOOR_Y + 1, zw - 2, H - FLOOR_Y - 2); g.setLineDash([]);
+  // view cone from the mouth down to what it sees
+  g.fillStyle = 'rgba(255,214,64,.07)';
+  g.beginPath(); g.moveTo(S.mouth.x - 8, S.mouth.y); g.lineTo(S.mouth.x + 8, S.mouth.y); g.lineTo(z0 + zw, FLOOR_Y); g.lineTo(z0, FLOOR_Y); g.closePath(); g.fill();
+  const edge = viewCols(2)[0];
   g.strokeStyle = 'rgba(241,230,200,.18)'; g.lineWidth = 1;
   g.beginPath(); g.moveTo(edge * TW, FLOOR_Y); g.lineTo(edge * TW, H); g.stroke();
   const zn = S.mirror ? [...ZONE_NAMES].reverse() : ZONE_NAMES;
-  [[0, edge / 2], [2, (edge + COLS) / 2]].forEach(([i, cx]) => osrsText(g, i === S.facing ? `OLM SEES: ${zn[i]}` : zn[i], cx * TW, H - 10, i === S.facing ? '#ffff00' : 'rgba(241,230,200,.45)', 20));
+  [0, 2].forEach(f => { if (f !== S.facing) { const [a, b] = viewCols(f); osrsText(g, zn[f], (a + b + 1) / 2 * TW, H - 10, 'rgba(241,230,200,.45)', 20); } });
+  osrsText(g, `OLM SEES: ${zn[S.facing]}`, (vc0 + vc1 + 1) / 2 * TW, H - 10, '#ffff00', 20);
 
   // ground markers (tile pack): thin outline like RuneLite
   S.marks.forEach(m => {
@@ -1286,7 +1321,7 @@ function drawOverlay(g) {
   const next = S.stepIdx % 4;
   const names = ['Basic 1', 'Null (head turns)', 'Basic 2', S.mode === 'prayer' ? 'Null' : 'SPECIAL'];
   const until = 4 - (S.tick % 4);
-  osrsText(g, 'Olm', x + 8, y + 18, '#ff981f', 19, 'left');
+  osrsText(g, `Olm · head ${S.facing === 1 ? 'MIDDLE' : S.facing === S.mageSide ? 'MAGE' : 'MELEE'}`, x + 8, y + 18, '#ff981f', 19, 'left');
   osrsText(g, `Next: ${names[next]}`, x + 8, y + 38, next === 3 && S.mode !== 'prayer' ? '#ff4a3a' : '#ffffff', 19, 'left');
   osrsText(g, `In: ${until} tick${until > 1 ? 's' : ''}`, x + 8, y + 57, '#ffffff', 19, 'left');
   if (S.mode !== 'prayer') osrsText(g, SPECIALS[S.specIdx % 3].name, x + w - 8, y + 18, '#c9c9c9', 16, 'right');
@@ -1301,7 +1336,8 @@ function drawOverlay(g) {
 function drawProjectile(g, pr, now) {
   const t = Math.min(1, (S.tick - pr.from + interp) / (pr.land - pr.from));
   const tx = px(pr.target), ty = py(pr.target) - 10;
-  const pos = u => ({ x: MOUTH.x + (tx - MOUTH.x) * u, y: MOUTH.y + (ty - MOUTH.y) * u - Math.sin(u * Math.PI) * 30 });
+  const M = S.mouth || MOUTH;
+  const pos = u => ({ x: M.x + (tx - M.x) * u, y: M.y + (ty - M.y) * u - Math.sin(u * Math.PI) * 30 });
   const p = pos(t);
   const L = pr.kind === 'sphere' ? null : look[pr.kind];
   const trailCol = pr.kind === 'sphere' ? sphereCol(pr.color) : L.core;
@@ -1401,6 +1437,11 @@ function drawHead(g, now) {
   g.beginPath(); g.moveTo(-20, 26); g.lineTo(-14, 52 + open * 12); g.lineTo(14, 52 + open * 12); g.lineTo(20, 26); g.closePath(); g.fill(); g.stroke();
   if (open) { g.fillStyle = '#1a1a10'; g.fillRect(-12, 34, 24, 12); }
   g.restore();
+  const fl = (now - S.turnFlash) / 600;
+  if (S.turnFlash && fl < 1) {
+    g.globalAlpha = 1 - fl; g.strokeStyle = '#ffff00'; g.lineWidth = 3;
+    g.beginPath(); g.arc(HEAD.x, HEAD.y + 6, 62 + fl * 14, 0, 7); g.stroke(); g.globalAlpha = 1;
+  }
 }
 
 function drawHand(g, side) {
