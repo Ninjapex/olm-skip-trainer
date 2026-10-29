@@ -301,7 +301,7 @@ footer { margin-top: 32px; border-top: 2px solid var(--stone-lo); padding-top: 1
     <div class="keys">
       <span>Click a tile to walk · <kbd>1</kbd> left · <kbd>2</kbd> middle · <kbd>3</kbd> right · arrows step</span>
       <span><kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd> prayers</span>
-      <span><kbd>F</kbd> eat · <kbd>R</kbd> restore · <kbd>P</kbd> pause</span>
+      <span><kbd>Space</kbd> pause/play · <kbd>F</kbd> eat · <kbd>R</kbd> restore</span>
     </div>
   </section>
 
@@ -1782,7 +1782,7 @@ function draw(now) {
 
   if (S.paused && !S.over) {
     g.fillStyle = 'rgba(8,6,4,.55)'; g.fillRect(0, 0, W, H);
-    osrsText(g, 'PAUSED · press P', W / 2, H / 2, '#ff981f', 42);
+    osrsText(g, 'PAUSED · press Space', W / 2, H / 2, '#ff981f', 42);
   }
 }
 
@@ -2053,6 +2053,7 @@ document.addEventListener('keydown', e => {
     arrowleft: () => walkTo(S.you.tc - 1, S.you.tr), arrowright: () => walkTo(S.you.tc + 1, S.you.tr),
     arrowup: () => walkTo(S.you.tc, S.you.tr - 1), arrowdown: () => walkTo(S.you.tc, S.you.tr + 1),
     f: eat, r: restore, p: () => togglePause(),
+    ' ': () => (S.running && !S.over ? togglePause() : startRun()),   // space: pause/play (starts a run if none is going)
   };
   if (map[k]) { e.preventDefault(); map[k](); }
 });
