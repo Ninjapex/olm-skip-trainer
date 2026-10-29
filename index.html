@@ -107,6 +107,22 @@ select { font-family: var(--font-body); font-size: .98rem; background: var(--sto
 /* under the game view */
 .below { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 10px; }
 @media (max-width: 760px) { .below { grid-template-columns: 1fr; } }
+/* Wide screens: game on the left (sized to the screen height), everything you read on the right,
+   so the instructions, tracker and prayers are visible without scrolling. */
+@media (min-width: 1100px) {
+  .wrap { max-width: 1560px; }
+  header.top { padding-block: 10px 0; }
+  nav.tabs { margin-block: 6px 10px; }
+  #sim { grid-template-columns: minmax(0, 1fr) 440px; align-items: start; gap: 12px; }
+  #sim > .sim-controls { grid-column: 1 / -1; padding: 6px 10px; }
+  #sim > .stage { grid-column: 1; grid-row: 2 / span 5; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 52px); }
+  #sim > .nowbox, #sim > .tracker, #sim > .below, #sim > .keys { grid-column: 2; }
+  .stage canvas { max-height: calc(100vh - 150px); width: auto; margin: 0 auto; }
+  .below { grid-template-columns: 1fr; }
+  .below .side { order: -1; }
+  .chatbox { min-height: 120px; }
+  .trk-row { grid-template-columns: 90px 1fr; }
+}
 .chatbox {
   background: linear-gradient(180deg, #d4c197, #c2ad82); color: var(--parch-ink);
   border: 2px solid var(--stone-lo); box-shadow: inset 0 0 0 2px #8c7650; border-radius: 4px;
