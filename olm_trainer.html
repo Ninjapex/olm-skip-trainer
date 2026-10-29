@@ -139,6 +139,32 @@ select { font-family: var(--font-body); font-size: .98rem; background: var(--sto
 .statgrid b { font-family: var(--font-num); font-weight: 400; font-size: 1.2rem; color: var(--yellow); text-align: right; font-variant-numeric: tabular-nums; }
 .keys { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .9rem; color: var(--muted); padding: 2px 4px; }
 
+/* order tracker */
+.tracker { padding: 10px 12px; display: grid; gap: 8px; }
+.trk-row { display: grid; grid-template-columns: 120px 1fr; gap: 10px; align-items: center; }
+@media (max-width: 560px) { .trk-row { grid-template-columns: 1fr; gap: 4px; } }
+.trk-label { font-family: var(--font-ui); font-size: .82rem; letter-spacing: .05em; text-transform: uppercase; color: var(--orange); }
+.trk-cells { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; }
+.trk-cells div { position: relative; background: var(--stone-2); border: 2px solid var(--stone-lo); border-radius: 4px; padding: 6px 4px 5px; text-align: center; font-family: var(--font-ui); font-size: .9rem; line-height: 1.15; color: var(--muted); }
+.trk-cells div small { display: block; font-family: var(--font-body); font-size: .72rem; color: var(--muted); }
+.trk-cells div.sp { color: #ffb0a6; }
+.trk-cells div.next, .trk-cells div.sp.next { color: #1c1408; background: linear-gradient(180deg, #ffe066, #e9b318); border-color: #6b5205; }
+.trk-cells div.next small { color: #3a2c05; }
+.trk-cells div.next::after { content: "NEXT"; position: absolute; top: -9px; right: 4px; font-family: var(--font-num); font-size: .85rem; line-height: 1; background: #000; color: var(--yellow); padding: 1px 4px; border-radius: 3px; }
+.trk-tip { font-size: .92rem; color: var(--muted); }
+.trk-tip b { color: var(--fg); }
+.trk-flag { font-family: var(--font-num); font-size: 1.15rem; color: var(--yellow); }
+/* real-raid tracker tab */
+.rt-specials { display: flex; gap: 8px; flex-wrap: wrap; }
+.rt-specials .btn { font-size: 1.05rem; padding: 10px 16px; }
+.rt-steps { display: grid; gap: 6px; }
+.rt-steps div { display: grid; grid-template-columns: 30px 1fr; gap: 10px; align-items: center; padding: 9px 12px; border-radius: 4px; background: var(--stone-2); border: 2px solid var(--stone-lo); }
+.rt-steps div b { font-family: var(--font-ui); color: var(--orange); }
+.rt-steps div.now { background: linear-gradient(180deg, #ffe066, #e9b318); color: #1c1408; border-color: #6b5205; }
+.rt-steps div.now b { color: #1c1408; }
+.rt-steps div.done { opacity: .5; }
+.rt-big { font-family: var(--font-ui); font-size: 1.4rem; color: var(--yellow); text-shadow: 1px 1px 0 #000; }
+
 /* how-it-works + quiz */
 .card { padding: 14px 16px; display: grid; gap: 8px; align-content: start; min-width: 0; }
 .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
@@ -187,6 +213,7 @@ footer { margin-top: 32px; border-top: 2px solid var(--stone-lo); padding-top: 1
 
   <nav class="tabs" role="tablist">
     <button role="tab" id="tab-sim" aria-controls="sim" aria-selected="true" data-tab="sim">Play</button>
+    <button role="tab" id="tab-track" aria-controls="track" aria-selected="false" data-tab="track">Raid tracker</button>
     <button role="tab" id="tab-learn" aria-controls="learn" aria-selected="false" data-tab="learn">How it works</button>
     <button role="tab" id="tab-quiz" aria-controls="quiz" aria-selected="false" data-tab="quiz">Quiz</button>
   </nav>
@@ -223,11 +250,19 @@ footer { margin-top: 32px; border-top: 2px solid var(--stone-lo); padding-top: 1
       <div class="overlay" id="ov">
         <div class="box stone" id="ovbox">
           <h3>You're the mage</h3>
-          <p>Your melee guy stays on the melee side (right). You start <b>LEFT</b> on the mage side and cast at the mage hand automatically.</p>
+          <p>The phase starts with everyone <b>speccing the melee hand</b> until it cripples. Then you go <b>LEFT</b>, set the head, and cast at the mage hand automatically. Your melee guy stays on the melee side.</p>
           <p>The route is <b>MIDDLE → RIGHT → LEFT</b>: tank basic 2 on the middle tile, step right for the special, run back left when the head turns. Follow the yellow text, or press <b>1 2 3</b>.</p>
           <button class="btn primary" id="ovStart">Start</button>
         </div>
       </div>
+    </div>
+
+    <div class="tracker stone" id="tracker">
+      <div class="trk-row"><span class="trk-label">Olm's cycle</span>
+        <div class="trk-cells" id="trkCycle"><div>Basic 1<small>→ melee guy</small></div><div>Null<small>head turns</small></div><div>Basic 2<small>you tank, MID</small></div><div class="sp">Special<small>you're RIGHT</small></div></div></div>
+      <div class="trk-row"><span class="trk-label">Specials order</span>
+        <div class="trk-cells" id="trkSpec"><div class="sp">Crystals</div><div class="sp">Lightning</div><div class="sp">Portals</div></div></div>
+      <p class="trk-tip" id="trkTip"><b>Lost?</b> Wait for the next special and find it in the specials order. Then count <b>Basic 1, Null, Basic 2</b>, and the next special is the one after it.</p>
     </div>
 
     <div class="below">
@@ -326,6 +361,30 @@ footer { margin-top: 32px; border-top: 2px solid var(--stone-lo); padding-top: 1
     </div>
   </section>
 
+  <!-- ===================== RAID TRACKER ===================== -->
+  <section class="panel" id="track" role="tabpanel" aria-labelledby="tab-track" hidden>
+    <div class="card stone">
+      <span class="eyebrow">For real raids · keep it open on your phone</span>
+      <h2>Lost your count? Tap the special you just saw.</h2>
+      <div class="rt-specials">
+        <button class="btn" data-sp="0">Crystals</button>
+        <button class="btn" data-sp="1">Lightning</button>
+        <button class="btn" data-sp="2">Portals</button>
+        <button class="btn" data-sp="3" id="rtHealBtn" hidden>Heal</button>
+      </div>
+      <label class="check"><input type="checkbox" id="rtP3"> Last phase before the head (a Heal special comes after Portals)</label>
+    </div>
+    <div class="card stone" id="rtOut">
+      <p class="rt-big" id="rtNext">Tap a special above to start.</p>
+      <div class="rt-steps" id="rtSteps"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn primary" id="rtStep">Next step ▶</button>
+        <button class="btn" id="rtReset">Reset</button>
+      </div>
+      <p class="muted">Tap <b>Next step</b> each time Olm acts (every 4 ticks). Anything fired from the head counts as a basic: magic, ranged, prayer orbs, burn, fire wall, acid. If the melee hand is crippled, there are no specials until it opens again.</p>
+    </div>
+  </section>
+
   <!-- ===================== QUIZ ===================== -->
   <section class="panel" id="quiz" role="tabpanel" aria-labelledby="tab-quiz" hidden>
     <div class="quiz stone" id="quizbox">
@@ -414,7 +473,7 @@ function setLook(k) {
 }
 
 /* ---------------- tabs ---------------- */
-const TABS = ['sim', 'learn', 'quiz'];
+const TABS = ['sim', 'track', 'learn', 'quiz'];
 let currentTab = 'sim';
 function showTab(t) {
   if (!TABS.includes(t)) t = 'sim';
@@ -574,7 +633,9 @@ function makeState(running) {
   const home = mt({ c: R.home.c, r: skipRow }), mid = mt({ c: R.mid.c, r: skipRow }), right = mt({ c: R.right.c, r: skipRow });
   const mel = mt(LAYOUT.melee), thumb = mt(LAYOUT.thumb);
   const mageSide = mirror ? 2 : 0;
-  const you = { name: 'You', you: true, c: home.c, r: home.r, pc: home.c, pr: home.r, tc: home.c, tr: home.r, hitUntil: 0, say: null };
+  const opening = mode !== 'prayer';
+  const st0 = opening ? thumb : home;   // phase start: everyone is over at the melee hand
+  const you = { name: 'You', you: true, c: st0.c, r: st0.r, pc: st0.c, pr: st0.r, tc: st0.c, tr: st0.r, hitUntil: 0, say: null };
   const mate = { name: 'Melee guy', c: mel.c, r: mel.r, pc: mel.c, pr: mel.r, tc: mel.c, tr: mel.r, home: mel, hitUntil: 0, say: null };
   const hands = {};
   hands[mageSide] = { type: 'mage', hp: 600, hits: [], clench: 0 };
@@ -585,7 +646,7 @@ function makeState(running) {
     mode, mirror, wheels: $('#wheels').checked,
     tickMs: 600 / +$('#speed').value, lastTickAt: performance.now(),
     tick: 0, facing: startFacing, headAngle: (1 - startFacing) * .42,
-    olmActs: 0, seenSpecial: mode !== 'set', setAt: null,
+    olmActs: 0, seenSpecial: mode !== 'set', setAt: null, opening, crippled: false, reachedLeft: false,
     stepIdx: mode === 'set' ? rand(0, 3) : 0, specIdx: rand(0, 2), mouthUntil: 0,
     style: Math.random() < .5 ? 'magic' : 'ranged', catchUp: false,
     players: [you, mate], you, mate, home, mid, right, thumb, portalUntil: 0,
@@ -677,9 +738,27 @@ function doTick() {
 }
 
 // You auto-cast on the mage hand every 4 ticks. That damage is what pulls Olm's head to the mage side.
+// Phase start: you and your melee guy dump specs on the melee hand until a big hit cripples (clenches) it.
+function openingSpec(p) {
+  const h = S.hands[S.meleeSide];
+  if (h.clench || h.hp <= 0) return;
+  S.casts.push({ t: S.tick, from: p, side: S.meleeSide });
+  const d = rand(14, 52);
+  h.hits.push({ t: S.tick, d });
+  h.hp = Math.max(1, h.hp - d);
+  const hp = handPos(S.meleeSide);
+  S.events.push({ t: S.tick + 1, fn: () => splat(hp.x + (p.you ? -14 : 14), hp.y, d, 'red') });
+  if (d >= 30) {
+    h.clench = S.tick + 50; S.opening = false; S.crippled = true;
+    chat('The Great Olm\'s left claw clenches to protect itself temporarily.', 'olm');
+    notice('Melee hand crippled! Go LEFT and set the head', 'good', 2600);
+  }
+}
+
 function mageCast() {
+  if (S.opening) return openingSpec(S.you);
   const h = S.hands[S.mageSide];
-  S.casts.push({ t: S.tick, from: S.you });
+  S.casts.push({ t: S.tick, from: S.you, side: S.mageSide });
   if (h.hp <= 0) return;
   const d = rand(4, 32);
   h.hits.push({ t: S.tick, d: Math.max(d, 1) });
@@ -691,9 +770,10 @@ function mageCast() {
 // Duo: your melee guy stays on the melee side on long range and attacks the MAGE hand too (Synq, Qevon),
 // so the mage hand always has the most damage and Olm's head swings to the mage side on the null.
 function meleeGuyHit() {
+  if (S.opening) return openingSpec(S.mate);
   const h = S.hands[S.mageSide];
   if (h.hp <= 0 || zoneOf(S.mate.c) !== S.meleeSide) return;
-  S.casts.push({ t: S.tick, from: S.mate });
+  S.casts.push({ t: S.tick, from: S.mate, side: S.mageSide });
   const d = rand(4, 28);
   h.hits.push({ t: S.tick, d: Math.max(d, 1) });
   h.hp = Math.max(0, h.hp - d);
@@ -728,13 +808,18 @@ function olmAct() {
     const pull = S.mode === 'prayer' ? S.mageSide : clawPull();
     if (pull !== null && pull !== S.facing) {
       S.facing = pull;
-      if (pull === S.mageSide && S.mode !== 'prayer') chat('Olm turns its head to the mage side.', 'olm');
+      if (pull === S.mageSide && S.mode !== 'prayer') { chat('Olm turns its head to the mage side.', 'olm'); if (!S.opening && S.reachedLeft) S.seenSpecial = true; }
     }
     if (S.catchUp && counts[S.facing] > 0) { standardAttack(true); S.catchUp = false; }
   } else if (counts[S.facing] === 0) {
     // nobody where Olm is looking: it turns to the other side and loses this action
     if (counts[other] > 0) S.facing = other;
-    if (step === 'std') { S.catchUp = true; notice('Too early: Olm lost a BASIC, not the special', 'bad'); }
+    if (step === 'std') {
+      S.catchUp = true;
+      if (S.stepIdx % 4 === 2 && S.reachedLeft) notice('Too early: tank Basic 2 BEFORE you step right', 'bad');
+      else chat('Nobody on Olm\'s side: it turned and lost a basic (it will catch up).', 'olm');
+    }
+    else if (S.hands[S.meleeSide].clench) { /* crippled: there was no special to skip */ }
     else {
       const sp = SPECIALS[S.specIdx % 3]; S.specIdx++;
       S.stats.skipped++;
@@ -747,6 +832,7 @@ function olmAct() {
   } else {
     if (S.catchUp) { standardAttack(true); S.catchUp = false; }
     if (step === 'std') standardAttack(false);
+    else if (S.hands[S.meleeSide].clench) chat('The melee hand is crippled: no special this time.', 'olm');
     else doSpecial(SPECIALS[S.specIdx++ % 3]);
   }
   S.stepIdx++;
@@ -874,7 +960,7 @@ function startRun() {
   $('#ov').hidden = true;
   $('#pauseBtn').textContent = 'Pause';
   chatEl.innerHTML = '';
-  chat(S.mode === 'set' ? 'Watch the head. Wait for a special, then count.' : S.mode === 'prayer' ? 'Pray against every attack. Spheres: switch after launch.' : 'You are on the mage hand. Your melee guy has the melee hand.', 'coach');
+  chat(S.mode === 'prayer' ? 'Pray against every attack. Prayer orbs: switch after launch.' : 'Phase start: spec the melee hand until it cripples, then go LEFT and set the head.', 'coach');
   updateHUD();
 }
 function togglePause(force) {
@@ -923,11 +1009,16 @@ function endRun(died) {
 function coach() {
   if (!S.running || S.over || !S.wheels || S.mode === 'prayer') return null;
   if (S.tick < S.portalUntil) return { text: 'SWAP! Meet at the THUMB tile', target: S.thumb, hot: true };
+  if (S.opening) return { text: 'Phase start: everyone spec the MELEE hand', target: null };
+  if (S.crippled && !S.reachedLeft) {
+    if (S.you.c === S.home.c && S.you.r === S.home.r) S.reachedLeft = true;
+    else return { text: 'Melee hand crippled! Go LEFT to set the head', target: S.home, hot: true };
+  }
   const next = S.stepIdx % 4;
   const at = t => S.you.c === t.c && S.you.r === t.r;
   const headOnYou = S.facing === S.mageSide;
   if (S.mode === 'set' && !S.seenSpecial) {
-    return at(S.home) ? { text: 'Stay LEFT and watch for a special icon', target: null } : { text: 'Go LEFT and watch for a special', target: S.home };
+    return at(S.home) ? { text: 'Stay LEFT. Watch for a special or the head turning to you', target: null } : { text: 'Go LEFT and watch the head', target: S.home };
   }
   if (next === 3) return at(S.right) ? { text: 'On the RIGHT. Special due: watch it skip', target: null }
                                      : { text: 'Tanked basic 2: step RIGHT now!', target: S.right, hot: true };
@@ -955,6 +1046,14 @@ function updateHUD() {
   if (!autoPray()) rows.push(['Prayer accuracy', pt ? Math.round(st.pOk / pt * 100) + '%' : '—'], ['Spheres blocked', `${st.sOk}/${st.sOk + st.sBad}`]);
   rows.push(['Damage taken', st.dmg]);
   $('#stats').innerHTML = rows.map(r => `<span>${r[0]}</span><b>${r[1]}</b>`).join('');
+  // order tracker: hidden highlights in the "Set the skip" drill (you find it yourself) and with training wheels off
+  const showNext = S.running && S.wheels && S.mode !== 'set';
+  $$('#trkCycle div').forEach((d, i) => d.classList.toggle('next', showNext && i === S.stepIdx % 4));
+  $$('#trkSpec div').forEach((d, i) => d.classList.toggle('next', showNext && S.mode !== 'prayer' && i === S.specIdx % 3));
+  const mh = S.hands[S.meleeSide];
+  $('#trkTip').innerHTML = S.opening ? '<span class="trk-flag">Phase start:</span> spec the melee hand until it cripples.'
+    : mh.clench ? `<span class="trk-flag">Melee hand crippled: no specials for ${mh.clench - S.tick} ticks.</span> Go left and set the head now.`
+    : '<b>Lost?</b> Wait for the next special and find it in the specials order. Then count <b>Basic 1, Null, Basic 2</b>, and the next special is the one after it.';
 }
 
 /* ---- drawing helpers ---- */
@@ -1075,7 +1174,7 @@ function draw(now) {
   // your spell on the mage hand
   S.casts.forEach(k => {
     const t = Math.min(1, (S.tick - k.t + interp) / 1.1);
-    const hp = handPos(S.mageSide);
+    const hp = handPos(k.side === undefined ? S.mageSide : k.side);
     const f = k.from || S.you;
     const x = px(f) + (hp.x - px(f)) * t, y = py(f) - 10 + (hp.y - py(f) + 10) * t;
     g.fillStyle = f.you ? 'rgba(255,120,40,.35)' : 'rgba(120,170,255,.35)'; g.beginPath(); g.arc(x, y, 9, 0, 7); g.fill();
@@ -1373,6 +1472,36 @@ document.addEventListener('keydown', e => {
   if (map[k]) { e.preventDefault(); map[k](); }
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden) togglePause(true); });
+
+/* ---- raid tracker (manual, for real raids) ---- */
+const RT_STEPS = [
+  ['Basic 1', 'Olm hits your melee guy. Get back LEFT.'],
+  ['Null', 'No attack. The head swings to the mage side.'],
+  ['Basic 2', 'Go to the MIDDLE tile and tank it.'],
+  ['Special', 'Step RIGHT before it. It gets skipped.'],
+];
+const RT_SP = ['Crystals', 'Lightning', 'Portals', 'Heal'];
+const rt = { sp: null, step: 0 };
+function rtOrder() { return $('#rtP3').checked ? [0, 1, 2, 3] : [0, 1, 2]; }
+function rtRender() {
+  $('#rtHealBtn').hidden = !$('#rtP3').checked;
+  if (rt.sp === null) { $('#rtNext').textContent = 'Tap a special above to start.'; $('#rtSteps').innerHTML = ''; return; }
+  const order = rtOrder();
+  const nextSp = RT_SP[order[(order.indexOf(rt.sp) + 1) % order.length]];
+  $('#rtNext').textContent = `Next special: ${nextSp}`;
+  $('#rtSteps').innerHTML = RT_STEPS.map(([n, d], i) =>
+    `<div class="${i === rt.step ? 'now' : i < rt.step ? 'done' : ''}"><b>${i + 1}</b><span><b>${i === 3 ? nextSp : n}</b> · ${d}</span></div>`).join('');
+}
+$$('.rt-specials .btn').forEach(b => b.addEventListener('click', () => { rt.sp = +b.dataset.sp; rt.step = 0; rtRender(); }));
+$('#rtStep').addEventListener('click', () => {
+  if (rt.sp === null) return;
+  rt.step++;
+  if (rt.step > 3) { const order = rtOrder(); rt.sp = order[(order.indexOf(rt.sp) + 1) % order.length]; rt.step = 0; }
+  rtRender();
+});
+$('#rtReset').addEventListener('click', () => { rt.sp = null; rt.step = 0; rtRender(); });
+$('#rtP3').addEventListener('change', () => { if (rt.sp === 3 && !$('#rtP3').checked) rt.sp = 2; rtRender(); });
+rtRender();
 
 /* ---- boot ---- */
 let savedLook = 'osrs';
