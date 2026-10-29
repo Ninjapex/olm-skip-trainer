@@ -114,7 +114,7 @@ select { font-family: var(--font-body); font-size: .98rem; background: var(--sto
   #sim > .sim-controls { grid-column: 1 / -1; padding: 6px 10px; }
   #sim > .stage { grid-column: 1; grid-row: 2 / span 5; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 52px); }
   #sim > .nowbox, #sim > .tracker, #sim > .below, #sim > .keys { grid-column: 2; }
-  .stage canvas { max-height: calc(100vh - 150px); width: auto; margin: 0 auto; }
+  .stage canvas { margin: 0 auto; }   /* fitCanvas() sets the width so the game fills the space left on screen */
   .below { grid-template-columns: 1fr; }
   .below .side { order: -1; }
   .chatbox { min-height: 120px; }
@@ -556,6 +556,7 @@ function showTab(t) {
   });
   try { history.replaceState(null, '', '#' + t); } catch (e) {}
   if (t !== 'sim' && S && S.running && !S.paused) togglePause(true);
+  if (t === 'sim' && typeof fitCanvas === 'function') requestAnimationFrame(fitCanvas);
 }
 $$('nav.tabs button').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
 
@@ -665,6 +666,16 @@ function resizeCanvas() {
 }
 resizeCanvas();
 window.addEventListener('resize', resizeCanvas);
+// Wide screens: make the game as big as fits — the column's width, or the height left below it on screen.
+function fitCanvas() {
+  const stage = cv.parentElement;
+  if (innerWidth < 1100 || stage.offsetParent === null) { cv.style.width = ''; return; }
+  const top = stage.getBoundingClientRect().top + scrollY + 8;
+  const availH = Math.max(320, innerHeight - top - 14);
+  const availW = stage.clientWidth - 14;
+  cv.style.width = Math.round(Math.min(availW, availH * W / H)) + 'px';
+}
+window.addEventListener('resize', fitCanvas);
 
 /* ---- static scene, painted once ---- */
 function seeded(seed) { return () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; }
@@ -2277,5 +2288,7 @@ updateHUD();
 requestAnimationFrame(frame);
 const h0 = (location.hash || '').slice(1);
 showTab(TABS.includes(h0) ? h0 : 'sim');
+fitCanvas();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitCanvas);   // web fonts can change the header height
 })();
 </script>
