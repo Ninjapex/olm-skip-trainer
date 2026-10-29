@@ -348,6 +348,27 @@ footer { margin-top: 32px; border-top: 2px solid var(--stone-lo); padding-top: 1
     </div>
 
     <div class="block">
+      <h2>Which phase is it?</h2>
+      <p class="muted">A duo has 4 phases: three claw phases, then the head. Olm comes up on the other side of the room each time.</p>
+      <div class="grid3">
+        <div class="card stone"><span class="eyebrow">Phase 1</span><p><b>Tell:</b> first rise. Chat: "The Great Olm rises with the power of <span style="color:#3ee04f">acid</span> / <span style="color:#ff5a4e">flame</span> / <span style="color:#e070e0">crystal</span>."</p><p><b>Set:</b> it starts <b>melee-set</b> because everyone hammers the melee hand. Spec until it cripples, go left, tank Basic 1 and keep the head left through the null, tank Basic 2, then run right; back left when the head turns.</p></div>
+        <div class="card stone"><span class="eyebrow">Phase 2</span><p><b>Tell:</b> second rise, a <b>different</b> power, Olm on the other wall.</p><p><b>Set:</b> almost the same as phase 1. Run to your tiles first; you have time for one hit before going left. Spec then run straight to the mage side often sets it instantly.</p></div>
+        <div class="card stone"><span class="eyebrow">Phase 3 (2nd-to-last)</span><p><b>Tell:</b> head glows <b>green</b>, all powers, an <b>infinity symbol</b> on the melee hand (Heal special), lightning has an extra bolt.</p><p><b>Set:</b> melee hand no longer clenches. Keep skipping; Heal comes after Portals, skip it the same way. Dodge Basic 1 if it's a fire wall. Both claws low, melee hand first.</p></div>
+        <div class="card stone"><span class="eyebrow">Head phase</span><p><b>Tell:</b> "The Great Olm is giving its all. This is its final stand." No claws, crystals keep falling, blue Life Siphon tiles.</p><p><b>Do:</b> kill the head with ranged from the 3rd row. Each of you tanks one basic. Stand on a blue tile for Life Siphon.</p></div>
+      </div>
+    </div>
+
+    <div class="card stone">
+      <span class="eyebrow">Rules of thumb</span>
+      <p>• <b>Whoever tanks Basic 2 is the one skipping.</b></p>
+      <p>• <b>Tanked two basics in a row? It's set for you.</b></p>
+      <p>• <b>Melee hand cripples while the head looks away from you:</b> it's set for you.</p>
+      <p>• <b>A special lands while the head faces the melee side:</b> run left, and it's set. <b>A special lands on your side:</b> tank one, step right, and it's set.</p>
+      <p>• <b>You start seeing Crystal Burst, Lightning or Portals again:</b> the skip broke. Tank two basics after that special, the second with the head fully on your side, then right, then left.</p>
+      <p class="src">Sources: Synq, Qevon, Daep, r/2007scape and r/ironscape duo threads.</p>
+    </div>
+
+    <div class="block">
       <h2>Phase powers (they count as basics)</h2>
       <p class="muted">Each standard phase Olm rises with one power. In the 2nd-to-last phase it uses all three. A phase attack replaces about 1 in 3 of Olm's normal attacks (1 in 2 with all powers), so keep counting it as a basic.</p>
       <div class="grid3">
@@ -602,7 +623,7 @@ const SPHERE_PRAY = { red: 'melee', green: 'missiles', purple: 'magic' };
 const STYLE_PRAY = { magic: 'magic', ranged: 'missiles' };
 const autoPray = () => S.mode === 'skip' || S.mode === 'set' || S.mode === 'recover';
 const HEAD = { x: W / 2, y: 64 };
-const CLAW_HP = 600, HEAD_HP = 800;   // claw HP from the wiki; the head's duo HP is an estimate
+const CLAW_HP = 900, HEAD_HP = 1200;   // duo HP (CoX scaling: claws 600+300, head 800+400)
 const MOUTH = { x: W / 2, y: 128 };
 
 const cv = $('#cv');
@@ -692,7 +713,7 @@ function makeState(running) {
     olmActs: 0, seenSpecial: mode !== 'set', setAt: null, opening, crippled: false, reachedLeft: !opening,
     // "Get lost & recover" drill: after a few skips something breaks the skip and the hints go away
     lost: false, lostAt: 0, nextLostAt: mode === 'recover' ? rand(36, 52) : Infinity, lostSide: null, splashUntil: 0,
-    stepIdx: mode === 'set' ? rand(0, 3) : 0, specIdx: rand(0, 2), mouthUntil: 0,
+    stepIdx: mode === 'set' ? rand(0, 3) : 0, specIdx: mode === 'raid' ? 0 : rand(0, 2), mouthUntil: 0,
     style: Math.random() < .5 ? 'magic' : 'ranged', catchUp: false,
     players: [you, mate], you, mate, home, mid, right, thumb, portalUntil: 0,
     marks: LAYOUT.marks.map(t => ({ ...mt(t), label: t.label, dark: t.dark })),
@@ -714,10 +735,16 @@ if (S.raid) S.power = S.powerOrder[0];
 
 /* ---- chatbox ---- */
 const chatEl = $('#chat');
-function chat(text, kind = '') {
+const flipLR = t => (S && S.mirror ? t.replace(/\b(LEFT|RIGHT)\b/g, m => (m === 'LEFT' ? 'RIGHT' : 'LEFT')) : t);
+function chat(text, kind = '', word = null, wordCol = null) {
+  text = flipLR(text);
   const d = document.createElement('div');
   if (kind) d.className = kind;
-  d.textContent = text;
+  if (word && text.includes(word)) {
+    const i = text.indexOf(word), w = document.createElement('span');
+    w.textContent = word; w.style.color = wordCol;
+    d.append(text.slice(0, i), w, text.slice(i + word.length));
+  } else d.textContent = text;
   chatEl.appendChild(d);
   while (chatEl.children.length > 8) chatEl.removeChild(chatEl.firstChild);
 }
@@ -727,9 +754,9 @@ chat('Route: MIDDLE (tank basic 2) -> RIGHT (special skipped) -> LEFT. Press Sta
 /* ---- notices & splats ---- */
 function notice(text, kind = 'info', ms = 1700) {
   const col = kind === 'good' ? '#3ee04f' : kind === 'bad' ? '#ff4a3a' : '#ffff00';
-  S.notices.push({ text, col, until: performance.now() + ms, big: kind !== 'info' });
+  S.notices.push({ text: flipLR(text), col, until: performance.now() + ms, big: kind !== 'info' });
   if (S.notices.length > 2) S.notices.shift();
-  chat(text, kind === 'good' ? 'good' : kind === 'bad' ? 'bad' : '');
+  chat(text, kind === 'good' ? 'good' : kind === 'bad' ? 'bad' : '');   // chat() does its own flip
 }
 function splat(x, y, n, col) { S.splats.push({ x, y, n, col, until: performance.now() + 1000, born: performance.now() }); }
 function hurt(n) {
@@ -749,7 +776,8 @@ const handPos = side => ({ x: side === 0 ? 2 * TW + 10 : W - 2 * TW - 10, y: 100
 
 /* ---- prayers ---- */
 function setPrayer(p) {
-  if (!S.running || S.over) return;
+  if (!S.running || S.over || S.paused) return;
+  if (p && S.tick < (S.prayBlock || 0)) { chat('Your prayers are blocked for a moment.', 'bad'); return; }
   if (p && S.pp <= 0) { chat('You need to recharge your Prayer.', 'bad'); return; }
   S.prayer = (S.prayer === p) ? null : p;
   if (S.react && S.prayer === S.react.need) { S.stats.react.push(performance.now() - S.react.t); S.react = null; }
@@ -774,6 +802,7 @@ function doTick() {
     }
   }
   due.forEach(e => e.fn());
+  if (!S.reachedLeft && !S.opening && S.you.c === S.home.c && S.you.r === S.home.r) S.reachedLeft = true;
   phaseTick();
   if (S.mode === 'recover') lostEvents();
   if (S.transition) transitionTick();
@@ -810,9 +839,8 @@ function openingSpec(p) {
   const hp = handPos(S.meleeSide);
   S.events.push({ t: S.tick + 1, fn: () => splat(hp.x + (p.you ? -14 : 14), hp.y, d, 'red') });
   // the melee hand clenches once it takes 5% of its health (30) within 8 ticks
-  if (h.hits.filter(k => S.tick - k.t <= 8).reduce((a, k) => a + k.d, 0) >= 30) {
-    h.clench = S.tick + 50; S.opening = false; S.crippled = true;
-    chat('The Great Olm\'s left claw clenches to protect itself temporarily.', 'olm');
+  if (checkClench(h) || (S.raid && S.phase === 3 && d >= 30)) {
+    S.opening = false; S.crippled = true;
     notice('Melee hand crippled! Go LEFT and set the head', 'good', 2600);
   }
 }
@@ -823,7 +851,7 @@ function lostEvents() {
   S.lost = true; S.lostAt = S.tick; S.lostSide = null;
   const kind = pick(['splash', 'trap', 'drift', 'zeros']);
   if (kind === 'splash') {
-    S.splashUntil = S.tick + 5;
+    S.splashUntil = S.tick + 3;
     notice('You splashed and your melee guy hit the melee hand!', 'bad', 2600);
   } else if (kind === 'trap') {
     S.boundUntil = S.tick + 12;
@@ -883,6 +911,7 @@ function meleeGuyHit() {
     S.casts.push({ t: S.tick, from: S.mate, side: S.meleeSide });
     h.hits.push({ t: S.tick, d });
     h.hp = Math.max(1, h.hp - d);
+    checkClench(h);
     const hp = handPos(S.meleeSide);
     S.events.push({ t: S.tick + 1, fn: () => splat(hp.x, hp.y - 4, d, 'red') });
     return;
@@ -902,7 +931,13 @@ function meleeGuyHit() {
 function raidTarget(isMate) {
   if (S.headPhase) return 'head';
   const mage = S.hands[S.mageSide], mel = S.hands[S.meleeSide];
-  if (isMate && S.phase === 3 && !mel.down) return S.meleeSide;
+  if (S.phase === 3) {
+    const LOW = 120;
+    if (mel.down) return mage.down ? null : S.mageSide;
+    if (mage.down) return S.meleeSide;
+    if (isMate) return mel.hp > LOW ? S.meleeSide : mage.hp > LOW ? S.mageSide : S.meleeSide;
+    return mage.hp > LOW ? S.mageSide : S.meleeSide;   // you keep the mage hand low, then help finish the melee hand
+  }
   if (!mage.down) return S.mageSide;
   return mel.down ? null : S.meleeSide;
 }
@@ -928,10 +963,7 @@ function raidHit(p, d, miss, thrall) {
   h.hits.push({ t: S.tick, d });
   h.hp = Math.max(0, h.hp - d);
   if (!thrall) S.events.push({ t: S.tick + 1, fn: () => splat(hp.x + (p.you ? 0 : 14), hp.y - 4, d, d ? 'red' : 'blue') });
-  if (tgt === S.meleeSide && !S.hands[S.mageSide].down && h.hits.filter(k => S.tick - k.t <= 8).reduce((a, k) => a + k.d, 0) >= 30) {
-    h.clench = S.tick + 50;
-    chat('The Great Olm\'s left claw clenches to protect itself temporarily.', 'olm');
-  }
+  if (tgt === S.meleeSide) checkClench(h);
   if (h.hp === 0) clawDown(tgt);
 }
 function clawDown(side) {
@@ -950,11 +982,12 @@ function clawDown(side) {
 function clearHazards() {
   S.pools = {}; S.drip = null; S.burn = null; S.firewall = null; S.fall = null; S.fallMarks = []; S.bombs = [];
   S.proj = []; S.crystals = []; S.bolts = []; S.swapLink = null; S.portalUntil = 0; S.siphon = null; S.catchUp = false;
+  S.events = [];
 }
 function phaseEnd() {
   S.phaseTimes.push(S.stats.ticks);
   clearHazards();
-  S.transition = { until: S.tick + 22, left: 8, next: S.tick + 3 };
+  S.transition = { until: S.tick + 24, left: 8, next: S.tick + 3 };
   S.lost = false;
   notice(`Phase ${S.phase} done! Olm sinks into the floor`, 'good', 2600);
   chat('Crystals are falling: keep moving until Olm rises again.', 'coach');
@@ -981,32 +1014,34 @@ function olmRises() {
   S.opening = !S.headPhase; S.crippled = false; S.reachedLeft = S.headPhase; S.seenSpecial = true;
   // it rose on the other wall: you both cross the room and come in from the far side
   Object.assign(S.you, { c: 7, r: ROWS - 1, pc: 7, pr: ROWS - 1, tc: S.headPhase ? S.mid.c : S.thumb.c, tr: S.headPhase ? 2 : S.thumb.r });
-  Object.assign(S.mate, { c: 9, r: ROWS - 1, pc: 9, pr: ROWS - 1, tc: S.mate.home.c, tr: S.mate.home.r });
+  const mc = S.mirror ? 5 : 9;
+  Object.assign(S.mate, { c: mc, r: ROWS - 1, pc: mc, pr: ROWS - 1, tc: S.mate.home.c, tr: S.mate.home.r });
   if (S.headPhase) {
-    chat('The Great Olm is giving its all. This is its final stand!', 'olm');
+    chat('The Great Olm is giving its all. This is its final stand.', 'olm');
     notice('HEAD PHASE: kill the head!', 'good', 3000);
   } else {
-    chat(`The Great Olm rises with the power of ${POWER_NAME[S.power]}!`, 'olm');
+    if (S.power === 'all') chat('Olm rises with its head glowing green: all powers this phase.', 'coach'); else riseMessage(S.power);
     notice(`Phase ${S.phase} of 4: ${S.phase === 3 ? 'all powers + Heal' : POWER_NAME[S.power]}`, 'good', 3000);
   }
 }
 // Head phase: crystals keep falling, one follows a random player, and Life Siphon marks two safe tiles.
 function headPhaseTick() {
   if (S.transition || S.over) return;
-  if (!S.fall) S.fall = { target: pick(S.players), left: 11 };
+  if (!S.fall) S.fall = { target: pick(S.players), left: 11, next: S.tick };
   if (S.tick % 3 === 0) S.fallMarks.push({ c: rand(0, COLS - 1), r: rand(0, 5), land: S.tick + 2 });
+  if (S.tick % 3 === 1) S.fallMarks.push({ c: rand(4, 10), r: rand(0, 1), land: S.tick + 2 });   // the tiles by the head
   const sp = S.siphon;
   if (sp && S.tick >= sp.at) {
     const safe = sp.tiles.some(t => t.c === S.you.c && t.r === S.you.r);
     if (safe) chat('You stood on a siphon tile: no damage.', 'good');
-    else { const d = rand(10, 18); hurt(d); S.headHp = Math.min(HEAD_HP, S.headHp + d * 5); notice(`Life Siphon: Olm healed ${d * 5}`, 'bad', 2200); }
+    else { const d = rand(8, 18); hurt(d); S.headHp = Math.min(HEAD_HP, S.headHp + d * 5); notice(`Life Siphon: Olm healed ${d * 5}`, 'bad', 2200); }
     S.siphon = null;
   }
 }
 function lifeSiphon() {
   const tiles = [];
   while (tiles.length < 2) { const t = { c: rand(1, COLS - 2), r: rand(1, 4) }; if (!tiles.some(o => o.c === t.c && o.r === t.r)) tiles.push(t); }
-  S.siphon = { tiles, at: S.tick + 10 };
+  S.siphon = { tiles, at: S.tick + 9 };
   notice('LIFE SIPHON: stand on a blue tile!', 'bad', 2400);
 }
 function raidWon() {
@@ -1018,30 +1053,40 @@ function raidWon() {
 const PHASE_SET = {
   1: '<b>How to set:</b> spec the melee hand until it cripples, go LEFT, then tank Basic 2 on the MIDDLE, step RIGHT for the special, and back LEFT. Kill the mage hand, then the melee hand.',
   2: '<b>How to set:</b> same as phase 1. Olm rose on the other wall, so get to your tiles first. Dodge Basic 1 if it\'s a fire wall.',
-  3: '<b>How to set (2nd-to-last):</b> all powers + Heal. Your melee guy kills the melee hand first while you keep skipping (Heal comes after Portals; skip it the same way). A downed claw comes back after 30 s, so finish both close together.',
-  4: '<b>Head phase:</b> no more Crystal Burst, Lightning or Swap. Kill the head, keep walking out of falling crystals, and stand on a blue tile when Life Siphon comes.',
+  3: '<b>How to set (2nd-to-last):</b> all powers + Heal, and the melee hand no longer clenches. Keep skipping (Heal comes after Portals; skip it the same way) and dodge Basic 1 if it\'s a fire wall. Get both claws low (~10-15%), then finish the <b>melee hand first</b> and the mage hand right after: a downed claw comes back after ~30 s.',
+  4: '<b>Head phase:</b> no more Crystal Burst, Lightning or Swap. Kill the head with ranged from the 3rd row (crystals land by the head), keep walking out of falling crystals, and stand on a blue tile when Life Siphon comes (only the tick of the head\'s next attack counts).',
 };
+
+function checkClench(h) {
+  if (h.type !== 'melee' || h.clench || S.hands[S.mageSide].down || (S.raid && S.phase === 3)) return false;
+  const last = h.hits[h.hits.length - 1];
+  if (!last || last.t !== S.tick || last.d < 30) return false;
+  h.clench = S.tick + 45;
+  chat('The Great Olm\'s left claw clenches to protect itself temporarily.', 'olm');
+  return true;
+}
 
 function resetClaw(h) {
   chat(`${h.type === 'mage' ? 'Mage' : 'Melee'} hand down. Reset for practice.`);
-  S.events.push({ t: S.tick + 4, fn: () => { h.hp = 600; h.clench = 0; } });
+  S.events.push({ t: S.tick + 4, fn: () => { h.hp = CLAW_HP; h.clench = 0; } });
 }
 
 // On the null Olm scans nobody, so its head turns toward the claw that took the most damage in the last 4 ticks.
 // If the claws were only hit for zeros, the head looks to the middle instead (Daep).
 function clawPull() {
-  const recent = side => S.hands[side].hits.filter(k => S.tick - k.t <= 4);
+  const recent = side => S.hands[side].hits.filter(k => S.tick - k.t < 4);
   const hl = recent(0), hr = recent(2);
   if (!hl.length && !hr.length) return null;
   const l = hl.reduce((a, k) => a + k.d, 0), r = hr.reduce((a, k) => a + k.d, 0);
   if (!l && !r) return 1;
-  return l >= r ? 0 : 2;
+  if (l === r) return S.mageSide;
+  return l > r ? 0 : 2;
 }
 
 function olmAct() {
   let step = ROT[S.stepIdx % 4];
   if (S.mode === 'prayer' && step === 'special') step = 'empty';
-  if (S.raid && S.headPhase && step === 'special' && S.siphon) step = 'empty';
+  if (S.raid && S.headPhase && step === 'special') step = 'empty';   // no generic specials in the head phase
   S.olmActs++;
   [0, 2].forEach(side => { S.hands[side].hits = S.hands[side].hits.filter(k => S.tick - k.t <= 8); });
   const counts = [0, 1, 2].map(f => S.players.filter(p => sees(f, p.c)).length);
@@ -1065,6 +1110,7 @@ function olmAct() {
       else chat('Nobody on Olm\'s side: it turned and lost a basic (it will catch up).', 'olm');
     }
     else if (S.hands[S.meleeSide].clench && !S.headPhase) { /* crippled: there was no special to skip */ }
+    else if (S.headPhase) chat('Olm turned away: no Life Siphon this time.', 'olm');
     else {
       const sp = specList()[S.specIdx % specList().length]; S.specIdx++;
       S.stats.skipped++;
@@ -1093,6 +1139,11 @@ function olmAct() {
 /* ---------- phase powers (Acid, Flame, Crystal) ---------- */
 const POWER_ATKS = { acid: ['spray', 'drip'], flame: ['burn', 'wall'], crystal: ['fall', 'bombs'] };
 const POWER_NAME = { acid: 'Acid', flame: 'Flame', crystal: 'Crystal', all: 'all its powers' };
+const POWER_COL = { acid: '#00a000', flame: '#d00000', crystal: '#c000c0' };
+// the in-game rise message, with the power word coloured (acid green, flame red, crystal magenta)
+function riseMessage(power) {
+  chat(`The Great Olm rises with the power of ${power}.`, 'olm', power, POWER_COL[power]);
+}
 function pickPower() {
   const v = $('#power').value;
   return v === 'random' ? pick(['acid', 'flame', 'crystal']) : v;
@@ -1114,25 +1165,25 @@ function phaseAttack() {
   if (atk === 'spray') {
     const tiles = new Set([key(t.c, t.r)]);
     while (tiles.size < 7) tiles.add(key(rand(0, COLS - 1), rand(0, 4)));
-    tiles.forEach(k => { S.pools[k] = S.tick + 24; });
+    tiles.forEach(k => { S.pools[k] = S.tick + 16; });
     notice('Acid spray! Stay off the green pools', 'bad', 1800);
   } else if (atk === 'drip') {
-    S.drip = { target: t, until: S.tick + 12 };
+    S.drip = { target: t, until: S.tick + 21 };
     notice(`Acid drip on ${who}: every tile walked on becomes a pool`, t.you ? 'bad' : 'info', 2200);
   } else if (atk === 'burn') {
-    S.burn = { targets: [t], left: 6, next: S.tick + 2 };
+    S.burn = { targets: [t], left: 6, next: S.tick + 8 };
     t.say = { text: 'Burn with me!', until: performance.now() + 2000 };
     notice(`Burn on ${who}: keep away from each other`, t.you ? 'bad' : 'info', 2200);
   } else if (atk === 'wall') {
-    if (t.c === 7 && t.r === 0) { chat('The fire wall fizzles: nobody gets trapped on the centre tile.', 'olm'); return; }
-    S.firewall = { c: Math.max(1, Math.min(COLS - 2, t.c)), depth: 3, until: S.tick + 9, target: t };
+    if (t.c === S.mid.c && t.r === S.mid.r) { chat('The fire wall fizzles: nobody gets trapped on the centre tile.', 'olm'); return; }
+    S.firewall = { c: Math.max(1, Math.min(COLS - 2, t.c)), depth: 3, until: S.tick + 8, target: t };
     notice(`Fire wall on ${who}! Walk out the open end`, t.you ? 'bad' : 'info', 2200);
   } else if (atk === 'fall') {
-    S.fall = { target: t, left: 11 };
+    S.fall = { target: t, left: 11, next: S.tick };
     notice(`Crystals falling on ${who}: keep moving`, t.you ? 'bad' : 'info', 2200);
   } else if (atk === 'bombs') {
     for (let i = 0; i < 2; i++) {
-      const b = { c: Math.max(0, Math.min(COLS - 1, t.c + rand(-3, 3))), r: rand(0, 3), boom: S.tick + 8 };
+      const b = { c: Math.max(0, Math.min(COLS - 1, t.c + rand(-3, 3))), r: rand(0, 3), boom: S.tick + 9 };
       S.bombs.push(b);
     }
     notice('Crystal bombs! Get 5+ tiles away', 'bad', 2000);
@@ -1146,12 +1197,12 @@ function phaseTick() {
   // acid drip: the target leaves a pool on every tile it walks off
   if (S.drip) {
     const t = S.drip.target;
-    if (t.pc !== t.c || t.pr !== t.r) S.pools[key(t.pc, t.pr)] = S.tick + 20;
+    if (t.pc !== t.c || t.pr !== t.r) S.pools[key(t.pc, t.pr)] = S.tick + 16;
     if (S.tick >= S.drip.until) S.drip = null;
   }
   // deep burn: 5 damage every 4 ticks, spreads to anyone standing next to a burning player
   if (S.burn && S.tick >= S.burn.next) {
-    S.burn.next = S.tick + 4; S.burn.left--;
+    S.burn.next = S.tick + 8; S.burn.left--;
     S.players.forEach(o => {
       if (!S.burn.targets.includes(o) && S.burn.targets.some(b => cheb(b, o) <= 1)) {
         S.burn.targets.push(o); o.say = { text: 'I will burn with you!', until: performance.now() + 2000 };
@@ -1167,16 +1218,17 @@ function phaseTick() {
     if (you.c === f.c && you.r <= f.depth) { hurt(rand(50, 65)); notice('Burned in the fire wall!', 'bad'); }
     S.firewall = null;
   }
-  // falling crystals follow the target: one lands 2 ticks after it marks the tile
-  if (S.fall && S.fall.left > 0) {
+  // falling crystals follow the target: one every 2 ticks, landing 1 tick after it marks the tile
+  if (S.fall && S.fall.left > 0 && S.tick >= (S.fall.next || 0)) {
     const t = S.fall.target;
-    S.fallMarks.push({ c: t.c, r: t.r, land: S.tick + 2 });
+    S.fall.next = S.tick + 2;
+    S.fallMarks.push({ c: t.c, r: t.r, land: S.tick + 1 });
     if (--S.fall.left <= 0) S.fall = null;
   }
   S.fallMarks = S.fallMarks.filter(m => {
     if (m.land > S.tick) return true;
     S.puffs.push({ x: tileX(m.c), y: tileY(m.r), col: '#9ff0e2', born: performance.now() });
-    if (m.aoe) { const d = cheb(m, you); if (d === 0) hurt(rand(20, 25)); else if (d === 1) hurt(rand(12, 16)); }
+    if (m.aoe) { const d = cheb(m, you); if (d === 0) hurt(rand(17, 25)); else if (d === 1) hurt(rand(10, 16)); }
     else if (you.c === m.c && you.r === m.r) hurt(rand(15, 20));
     return false;
   });
@@ -1185,7 +1237,7 @@ function phaseTick() {
     if (b.boom > S.tick) return true;
     S.puffs.push({ x: tileX(b.c), y: tileY(b.r), col: '#7fe3d4', born: performance.now(), big: true });
     const d = cheb(b, you);
-    if (d <= 4) { hurt(15 + 15 * (4 - d)); notice('Caught by a crystal bomb', 'bad', 1500); }
+    if (d <= 4) { hurt([60, 45, 35, 25, 15][d]); notice('Caught by a crystal bomb', 'bad', 1500); }
     return false;
   });
 }
@@ -1196,6 +1248,11 @@ function standardAttack(isCatchUp) {
   const targets = targetsInView();
   if (!targets.length) return;
   S.mouthUntil = performance.now() + 450;
+  if (!isCatchUp && S.raid && S.headPhase && !S.siphon && S.olmActs >= (S.siphonReady || 0) && Math.random() < 1 / 16) {
+    S.siphonReady = S.olmActs + 10;
+    lifeSiphon();
+    return;
+  }
   if (!isCatchUp && S.power !== 'none' && S.mode !== 'prayer' && !S.opening && Math.random() < (S.power === 'all' ? .5 : 1 / 3)) {
     phaseAttack();
     return;
@@ -1251,50 +1308,53 @@ function doSpecial(sp) {
   S.icon = { id: sp.id, until: S.tick + 3 };
   S.seenSpecial = true;
   if (S.lost) { S.stats.lostTaken++; S.lostSide = S.facing === 1 ? 'middle' : S.facing === S.meleeSide ? 'melee' : 'mage'; }
-  if (!sees(S.facing, S.you.c)) {
-    S.stats.onMate++;
-    notice(`${sp.name} on your melee guy. Count from here!`, 'info', 2400);
+  if (S.opening) {
+    notice(`${sp.name} during the spec dump: normal, count from here`, 'info', 2200);
   } else {
-    S.stats.taken++;
-    notice(`${sp.name} hit you. ${S.mode === 'set' && !S.stats.skipped ? 'Count from here!' : 'Move earlier!'}`, 'bad', 2200);
+    // the special got through: say where the head was and how to re-set from here
+    if (sees(S.facing, S.you.c)) S.stats.taken++; else S.stats.onMate++;
+    const fix = S.facing === 1 ? 'head was in the MIDDLE: tank the next one, then go back LEFT'
+      : S.facing === S.meleeSide ? 'head was on the MELEE side: go LEFT, tank Basic 2 MIDDLE, then RIGHT'
+      : 'head was on YOUR side: count Basic 1, Null, Basic 2 (MIDDLE), then RIGHT';
+    notice(`${sp.name}! Re-set: ${fix}`, 'bad', 3600);
   }
   if (sp.id === 'heal') {
-    S.hands[S.meleeSide].healUntil = S.tick + 16;
+    S.hands[S.meleeSide].healUntil = S.tick + 8;
     chat('The melee hand glows: damage heals it for a while.', 'olm');
   }
   if (sp.id === 'crystal') {
     S.players.forEach(p => {
-      const c = { c: p.c, r: p.r, burst: S.tick + 4, born: S.tick };
+      const c = { c: p.c, r: p.r, burst: S.tick + 3, born: S.tick };
       S.crystals.push(c);
       S.events.push({ t: c.burst, fn: () => {
         S.crystals = S.crystals.filter(k => k !== c);
         S.puffs.push({ x: tileX(c.c), y: tileY(c.r), col: '#7fe3d4', born: performance.now(), big: true });
-        if (S.you.c === c.c && S.you.r === c.r) { hurt(rand(28, 40)); notice('Step off the crystal!', 'bad'); }
+        if (S.you.c === c.c && S.you.r === c.r) { hurt(rand(10, 40)); notice('Step off the crystal!', 'bad'); }
       } });
     });
   } else if (sp.id === 'lightning') {
     const cols = new Set();
     if (Math.random() < .6) cols.add(S.you.c);
-    while (cols.size < 4) cols.add(rand(0, COLS - 1));
+    while (cols.size < (S.power === 'all' ? 5 : 4)) cols.add(rand(0, COLS - 1));
     const b = { cols: [...cols], strike: S.tick + 2, until: S.tick + 3 };
     S.bolts.push(b);
     S.events.push({ t: b.strike, fn: () => {
       if (b.cols.includes(S.you.c)) {
-        hurt(rand(15, 25)); S.prayer = null; S.boundUntil = S.tick + 3;
+        hurt(rand(15, 25)); S.prayer = null; S.boundUntil = S.tick + 3; S.prayBlock = S.tick + 5;
         notice('Zapped: prayer off, put it back on!', 'bad', 2200);
       }
     } });
   } else if (sp.id === 'swap') {
     const m = S.mate;
-    S.swapLink = { a: S.you, b: m, until: S.tick + 3 };
-    S.portalUntil = S.tick + 3;
+    S.swapLink = { a: S.you, b: m, until: S.tick + 8 };
+    S.portalUntil = S.tick + 8;
     m.tc = S.thumb.c; m.tr = S.thumb.r;
-    S.events.push({ t: S.tick + 3, fn: () => {
+    S.events.push({ t: S.tick + 8, fn: () => {
       const d = Math.max(Math.abs(S.you.c - m.c), Math.abs(S.you.r - m.r));
       const yc = S.you.c, yr = S.you.r;
       Object.assign(S.you, { c: m.c, r: m.r, pc: m.c, pr: m.r, tc: m.c, tr: m.r });
       Object.assign(m, { c: yc, r: yr, pc: yc, pr: yr, tc: m.home.c, tr: m.home.r });
-      hurt(Math.min(40, d * 3));
+      hurt(Math.min(95, d * 5));
       notice(d <= 1 ? 'Swapped on the thumb: almost no damage' : `Swapped ${d} tiles apart: meet at the THUMB`, d <= 1 ? 'good' : 'bad');
     } });
   }
@@ -1308,11 +1368,11 @@ function walkTo(c, r) {
   S.clickMark = { c: S.you.tc, r: S.you.tr, born: performance.now() };
 }
 function eat() {
-  if (!S.running || S.over || !S.sharks || S.hp >= 99) return;
+  if (!S.running || S.over || S.paused || !S.sharks || S.hp >= 99) return;
   S.sharks--; S.hp = Math.min(99, S.hp + 20); chat('You eat the shark. It heals some health.'); updateHUD();
 }
 function restore() {
-  if (!S.running || S.over || !S.restores || S.pp >= 99) return;
+  if (!S.running || S.over || S.paused || !S.restores || S.pp >= 99) return;
   S.restores--; S.pp = Math.min(99, S.pp + 32); chat('You drink some of your super restore potion.'); updateHUD();
 }
 
@@ -1323,7 +1383,7 @@ function startRun() {
   $('#ov').hidden = true;
   $('#pauseBtn').textContent = 'Pause';
   chatEl.innerHTML = '';
-  if (S.power !== 'none' && S.mode !== 'prayer') { chat(`The Great Olm rises with the power of ${POWER_NAME[S.power]}!`, 'olm'); notice(`Olm rises with the power of ${POWER_NAME[S.power]}`, 'info', 2400); }
+  if (S.power !== 'none' && S.mode !== 'prayer') { if (S.power === 'all') chat('Olm\'s head glows green: all powers (2nd-to-last phase).', 'coach'); else riseMessage(S.power); notice(`Olm rises with the power of ${POWER_NAME[S.power]}`, 'info', 2400); }
   if (S.raid) chat('Full raid: 3 claw phases, then the head. Phase 1 starts now.', 'coach');
   chat(S.mode === 'prayer' ? 'Pray against every attack. Prayer orbs: switch after launch.' : S.mode === 'recover' ? 'The skip is running. Keep it going until something breaks it, then recover.' : 'Phase start: spec the melee hand until it cripples, then go LEFT and set the head.', 'coach');
   updateHUD();
@@ -1334,7 +1394,7 @@ function togglePause(force) {
   const to = force === true ? true : !S.paused;
   if (to === S.paused) return;
   S.paused = to;
-  if (to) S.pauseAt = now; else S.lastTickAt += now - S.pauseAt;
+  if (to) S.pauseAt = now; else { S.lastTickAt += now - S.pauseAt; if (S.react) S.react.t += now - S.pauseAt; }
   $('#pauseBtn').textContent = S.paused ? 'Resume' : 'Pause';
 }
 function summaryHTML(died) {
@@ -1351,7 +1411,7 @@ function summaryHTML(died) {
     const r = st.recov;
     rows.push(['Recoveries', r.length], ['Avg time to recover', r.length ? (r.reduce((a, b) => a + b, 0) / r.length).toFixed(1) + ' s' : '—'], ['Specials while lost', st.lostTaken]);
   }
-  if (S.mode !== 'prayer') rows.push(['Specials skipped', `${st.skipped} / ${st.skipped + st.taken}`]);
+  if (S.mode !== 'prayer') rows.push(['Specials skipped', `${st.skipped} / ${st.skipped + st.taken + st.onMate}`], ['Landed on you / melee guy', `${st.taken} / ${st.onMate}`]);
   if (!autoPray()) {
     rows.push(['Correct prayers', pt ? `${st.pOk} / ${pt} (${Math.round(st.pOk / pt * 100)}%)` : '—']);
     rows.push(['Spheres blocked', `${st.sOk} / ${st.sOk + st.sBad}`]);
@@ -1361,7 +1421,7 @@ function summaryHTML(died) {
   rows.push(['Damage taken', st.dmg]);
   rows.push(['Time', (st.ticks * 0.6).toFixed(1) + ' s']);
   let tip = '';
-  if (S.mode !== 'prayer' && st.taken > st.skipped) tip = 'Tip: tank basic 2 on the MIDDLE tile, then step RIGHT. Run back LEFT when the head turns.';
+  if (S.mode !== 'prayer' && st.taken + st.onMate > st.skipped) tip = 'Tip: tank basic 2 on the MIDDLE tile, then step RIGHT. Run back LEFT when the head turns.';
   else if (!autoPray() && st.sapped) tip = 'Tip: let the sphere launch first, then switch.';
   else if (!autoPray() && pt && st.pBad / pt > .2) tip = `Tip: ${look.magic.name} = MAGE, ${look.ranged.name.toLowerCase()} = RANGE.`;
   return `<h3>${died ? 'Oh dear, you are dead!' : S.won ? 'Olm defeated!' : 'Run summary'}</h3>
@@ -1384,7 +1444,8 @@ function phaseCoach() {
   if (f && S.tick < f.until && you.c === f.c && you.r <= f.depth) return { text: 'FIRE WALL! Walk out the open end', target: { c: you.c, r: f.depth + 1 }, hot: true };
   const bomb = S.bombs.find(b => cheb(b, you) <= 4);
   if (bomb) {
-    const away = { c: bomb.c <= 7 ? Math.min(COLS - 1, bomb.c + 5) : Math.max(0, bomb.c - 5), r: you.r };
+    const goRight = you.c > bomb.c || (you.c === bomb.c && bomb.c <= 7);
+    const away = { c: goRight ? Math.min(COLS - 1, bomb.c + 5) : Math.max(0, bomb.c - 5), r: you.r };
     return { text: 'Crystal bomb: get 5 tiles away!', target: away, hot: true };
   }
   if (S.pools[key(you.c, you.r)]) return { text: 'Get off the acid!', target: null, hot: true };
@@ -1394,6 +1455,10 @@ function phaseCoach() {
 }
 
 function coach() {
+  const c = coachRaw();
+  return c ? { ...c, text: flipLR(c.text) } : c;
+}
+function coachRaw() {
   if (S.running && !S.over && !S.wheels && S.lost && !S.lostSide) return { text: 'LOST! Find your count again', target: null };
   if (!S.running || S.over || !S.wheels || S.mode === 'prayer') return null;
   if (S.tick < S.portalUntil) return { text: 'SWAP! Meet at the THUMB tile', target: S.thumb, hot: true };
@@ -1402,6 +1467,7 @@ function coach() {
     if (S.headPhase) {
       if (S.siphon) { const t = S.siphon.tiles.reduce((a, b) => cheb(a, S.you) <= cheb(b, S.you) ? a : b); return { text: 'LIFE SIPHON: stand on a blue tile!', target: t, hot: true }; }
       const ph = phaseCoach(); if (ph) return ph;
+      if (S.you.r < 2) return { text: 'Head phase: stand on the 3rd row (crystals drop by the head)', target: { c: S.you.c, r: 2 } };
       return { text: 'Head phase: attack the head, keep walking out of crystals', target: null };
     }
     const mage = S.hands[S.mageSide], mel = S.hands[S.meleeSide];
@@ -1450,7 +1516,7 @@ function updateHUD() {
   $$('.pray-btn').forEach(b => b.classList.toggle('on', S.prayer === b.dataset.p));
   const st = S.stats; const pt = st.pOk + st.pBad;
   const rows = [];
-  if (S.mode !== 'prayer') rows.push(['Specials skipped', st.skipped], ['Specials taken', st.taken]);
+  if (S.mode !== 'prayer') rows.push(['Specials skipped', st.skipped], ['Specials landed', st.taken + st.onMate]);
   if (S.mode === 'recover') rows.push(['Recoveries', st.recov.length]);
   if (!autoPray()) rows.push(['Prayer accuracy', pt ? Math.round(st.pOk / pt * 100) + '%' : '—'], ['Spheres blocked', `${st.sOk}/${st.sOk + st.sBad}`]);
   rows.push(['Damage taken', st.dmg]);
@@ -1460,7 +1526,7 @@ function updateHUD() {
     phEl.textContent = S.transition ? `Between phases (after phase ${S.phase}): Olm is underground`
       : S.headPhase ? `Head phase (4 of 4) · head ${S.headHp}/${HEAD_HP}`
       : `Phase ${S.phase} of 4 · ${S.phase === 3 ? 'All powers + Heal' : POWER_NAME[S.power]}`;
-    setEl.hidden = false; setEl.innerHTML = PHASE_SET[S.transition ? Math.min(S.phase + 1, 4) : S.phase];
+    setEl.hidden = false; setEl.innerHTML = flipLR(PHASE_SET[S.transition ? Math.min(S.phase + 1, 4) : S.phase]);
   } else {
     phEl.textContent = S.mode === 'prayer' || S.power === 'none' ? 'Practice' : `Practice · ${POWER_NAME[S.power] || ''}`;
     setEl.hidden = true;
@@ -1701,7 +1767,18 @@ function draw(now) {
   }
   // notices
   S.notices = S.notices.filter(n => n.until > now);
-  S.notices.forEach((n, i) => osrsText(g, n.text, W / 2, FLOOR_Y + 240 + i * 32, n.col, n.big ? 28 : 22));
+  let ny = FLOOR_Y + 240;
+  S.notices.forEach(n => {
+    const size = n.big ? 26 : 21;
+    g.font = `${size}px VT323, monospace`;
+    const lines = [];   // wrap long messages so they stay on the canvas
+    n.text.split(' ').forEach(w => {
+      const last = lines[lines.length - 1];
+      if (last && g.measureText(last + ' ' + w).width < W - 40) lines[lines.length - 1] = last + ' ' + w; else lines.push(w);
+    });
+    lines.forEach(l => { osrsText(g, l, W / 2, ny, n.col, size); ny += size + 4; });
+    ny += 6;
+  });
 
   if (S.paused && !S.over) {
     g.fillStyle = 'rgba(8,6,4,.55)'; g.fillRect(0, 0, W, H);
@@ -1877,7 +1954,7 @@ function drawHand(g, side) {
   // OSRS-style health bar
   const bx = p.x - 30, by = p.y - 70;
   g.fillStyle = '#ff0000'; g.fillRect(bx, by, 60, 6);
-  g.fillStyle = '#00ff00'; g.fillRect(bx, by, 60 * h.hp / 600, 6);
+  g.fillStyle = '#00ff00'; g.fillRect(bx, by, 60 * h.hp / CLAW_HP, 6);
   g.strokeStyle = '#000'; g.lineWidth = 1; g.strokeRect(bx - .5, by - .5, 61, 7);
   if (S.icon && h.type === 'melee') {
     const x = p.x, y = p.y - 96;
@@ -1963,8 +2040,11 @@ cv.addEventListener('click', e => {
   if (y < FLOOR_Y) return;
   walkTo(Math.floor(x / TW), Math.floor((y - FLOOR_Y) / TW));
 });
+$$('.sim-controls select, .sim-controls input').forEach(el => el.addEventListener('change', () => el.blur()));
+$$('.sim-controls button, #ovStart').forEach(el => el.addEventListener('click', () => el.blur()));
 document.addEventListener('keydown', e => {
   if (currentTab !== 'sim') return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.target.closest && e.target.closest('select, input')) return;
   const k = e.key.toLowerCase();
   const map = {
