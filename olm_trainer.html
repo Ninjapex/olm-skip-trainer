@@ -269,6 +269,8 @@ footer { margin-top: 32px; border-top: 2px solid var(--stone-lo); padding-top: 1
         <select id="power"><option value="random" selected>Random</option><option value="acid">Acid</option><option value="flame">Flame</option><option value="crystal">Crystal</option><option value="all">All powers (2nd-to-last phase)</option><option value="none">None</option></select></div>
       <label class="check"><input type="checkbox" id="wheels" checked> Training wheels</label>
       <label class="check"><input type="checkbox" id="mirror"> Mirrored room</label>
+      <div class="field"><label for="mateTarget">Melee guy attacks</label>
+        <select id="mateTarget"><option value="mage" selected>Mage hand (duo)</option><option value="melee">Melee hand</option><option value="none">Nothing</option></select></div>
       <label class="check" title="A thrall chips the mage hand every 4 ticks, so the head turns reliably (Synq)"><input type="checkbox" id="thrall" checked> Thrall</label>
       <div class="ctrl-btns">
         <button class="btn primary" id="startBtn">Start</button>
@@ -329,6 +331,7 @@ footer { margin-top: 32px; border-top: 2px solid var(--stone-lo); padding-top: 1
       </div>
     </div>
     <div class="keys">
+      <span><b>Click a claw</b> to choose what you attack ·</span>
       <span>Click a tile to walk · <kbd>1</kbd> left · <kbd>2</kbd> middle · <kbd>3</kbd> right · arrows step</span>
       <span><kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd> prayers</span>
       <span><kbd>Space</kbd> pause/play · <kbd>F</kbd> eat · <kbd>R</kbd> restore</span>
@@ -780,7 +783,7 @@ function makeState(running) {
     hp: 99, pp: 99, prayer: null, sharks: 10, restores: 6, boundUntil: 0,
     hands, mageSide, meleeSide: 2 - mageSide,
     proj: [], events: [], crystals: [], bolts: [], notices: [], splats: [], casts: [], puffs: [],
-    icon: null, swapLink: null, thrall: $('#thrall').checked, zerosUntil: 0,
+    icon: null, swapLink: null, thrall: $('#thrall').checked, zerosUntil: 0, youTarget: null,
     // phase power: Olm's phase attacks replace some basics (they still count as basics)
     // full raid: 3 claw phases (two single powers, then all powers) and the head phase
     raid: mode === 'raid', phase: 1, powerOrder: ['acid', 'flame', 'crystal'].sort(() => Math.random() - .5),
@@ -930,6 +933,28 @@ function lostEvents() {
   chat('You lost the skip. Watch where the special lands, then set it again.', 'coach');
 }
 
+// Your target: a claw you clicked (while it's up), otherwise the mage hand.
+function yourTarget() {
+  const t = S.youTarget;
+  return t !== null && S.hands[t].hp > 0 && !S.hands[t].down ? t : S.mageSide;
+}
+function setYourTarget(side) {
+  S.youTarget = S.youTarget === side ? null : side;
+  chat(S.youTarget === null ? 'You attack automatically (the mage hand).' : `You now attack the ${S.hands[side].type} hand.`, 'coach');
+}
+// Damage to one claw from a practice-mode hit (clench + healing hand rules included)
+function hitClaw(side, d, from, thrall) {
+  const h = S.hands[side], hp = handPos(side);
+  S.casts.push({ t: S.tick, from, side, thrall });
+  if (h.hp <= 0) return;
+  if (h.type === 'melee' && h.clench) { if (!thrall) S.events.push({ t: S.tick + 1, fn: () => splat(hp.x, hp.y - 4, 0, 'blue') }); return; }
+  h.hits.push({ t: S.tick, d });
+  h.hp = Math.max(0, h.hp - d);
+  if (!thrall) S.events.push({ t: S.tick + 1, fn: () => splat(hp.x + (from.you ? 0 : 14), hp.y - 4, d, d ? 'red' : 'blue') });
+  if (h.type === 'melee') checkClench(h);
+  if (h.hp === 0) resetClaw(h);
+}
+
 function mageCast() {
   if (S.opening) return openingSpec(S.you);
   if (S.raid) return raidHit(S.you, rand(6, 36), .1, false);
@@ -940,26 +965,14 @@ function mageCast() {
     S.events.push({ t: S.tick + 1, fn: () => splat(hp.x, hp.y - 4, 0, 'blue') });
     return;
   }
-  const h = S.hands[S.mageSide];
-  S.casts.push({ t: S.tick, from: S.you, side: S.mageSide });
-  if (h.hp <= 0) return;
   const d = S.tick < S.zerosUntil || Math.random() < .1 ? 0 : rand(6, 36);   // spells splash sometimes
-  h.hits.push({ t: S.tick, d });
-  h.hp = Math.max(0, h.hp - d);
-  const hp = handPos(S.mageSide);
-  S.events.push({ t: S.tick + 1, fn: () => splat(hp.x, hp.y - 4, d, d ? 'red' : 'blue') });
-  if (h.hp === 0) resetClaw(h);
+  hitClaw(yourTarget(), d, S.you, false);
 }
 // Thrall: chips the mage hand (max hit 3) every 4 ticks, so there's always some damage for the head to follow
 function thrallHit() {
   if (S.raid) { if (S.thrall && !S.opening) raidHit(S.you, rand(1, 3), 0, true); return; }
-  const h = S.hands[S.mageSide];
-  if (!S.thrall || S.opening || h.hp <= 0) return;
-  const d = S.tick < S.zerosUntil ? 0 : rand(1, 3);
-  h.hits.push({ t: S.tick, d });
-  h.hp = Math.max(0, h.hp - d);
-  S.casts.push({ t: S.tick, from: S.you, side: S.mageSide, thrall: true });
-  if (h.hp === 0) resetClaw(h);
+  if (!S.thrall || S.opening) return;
+  hitClaw(yourTarget(), S.tick < S.zerosUntil ? 0 : rand(1, 3), S.you, true);   // the thrall follows your target
 }
 // Duo: your melee guy stays on the melee side on long range and attacks the MAGE hand too (Synq, Qevon),
 // so the mage hand always has the most damage and Olm's head swings to the mage side on the null.
@@ -976,21 +989,23 @@ function meleeGuyHit() {
     S.events.push({ t: S.tick + 1, fn: () => splat(hp.x, hp.y - 4, d, 'red') });
     return;
   }
-  const h = S.hands[S.mageSide];
-  if (h.hp <= 0 || zoneOf(S.mate.c) !== S.meleeSide) return;
-  S.casts.push({ t: S.tick, from: S.mate, side: S.mageSide });
-  const d = S.tick < S.zerosUntil || Math.random() < .15 ? 0 : rand(4, 28);
-  h.hits.push({ t: S.tick, d });
-  h.hp = Math.max(0, h.hp - d);
-  const hp = handPos(S.mageSide);
-  S.events.push({ t: S.tick + 1, fn: () => splat(hp.x + 14, hp.y + 6, d, d ? 'red' : 'blue') });
-  if (h.hp === 0) resetClaw(h);
+  const mt = $('#mateTarget').value;
+  if (mt === 'none' || zoneOf(S.mate.c) !== S.meleeSide) return;
+  const miss = S.tick < S.zerosUntil || Math.random() < .15;
+  if (mt === 'melee') hitClaw(S.meleeSide, miss ? 0 : rand(10, 40), S.mate, false);
+  else hitClaw(S.mageSide, miss ? 0 : rand(4, 28), S.mate, false);
 }
 /* ================= FULL RAID ================= */
 // Who attacks what: the mage hand first; in phase 3 your melee guy kills the melee hand first (Synq); then the last claw; then the head.
 function raidTarget(isMate) {
   if (S.headPhase) return 'head';
   const mage = S.hands[S.mageSide], mel = S.hands[S.meleeSide];
+  if (!isMate && S.youTarget !== null && !S.hands[S.youTarget].down) return S.youTarget;
+  if (isMate) {
+    const mt = $('#mateTarget').value;
+    if (mt === 'none') return null;
+    if (mt === 'melee' && !mel.down) return S.meleeSide;
+  }
   if (S.phase === 3) {
     const LOW = 120;
     if (mel.down) return mage.down ? null : S.mageSide;
@@ -1903,7 +1918,7 @@ function draw(now) {
 }
 
 function drawOverlay(g) {
-  const x = 8, y = H - 108, w = 182, h = 74;   // bottom-left of the floor, clear of the claws
+  const x = 8, y = H - 146, w = 196, h = 112;   // bottom-left of the floor, clear of the claws
   g.fillStyle = 'rgba(30,27,23,.82)'; g.fillRect(x, y, w, h);
   g.strokeStyle = 'rgba(90,80,64,.9)'; g.lineWidth = 1; g.strokeRect(x + .5, y + .5, w - 1, h - 1);
   const next = S.stepIdx % 4;
@@ -1918,6 +1933,14 @@ function drawOverlay(g) {
     g.fillStyle = on ? '#ffff00' : '#3a352e';
     g.beginPath(); g.arc(x + w - 52 + i * 13, y + 52, 5, 0, 7); g.fill();
     if (i === 3) { g.strokeStyle = '#7fe3d4'; g.lineWidth = 1.5; g.stroke(); }
+  }
+  // what the next null will do: damage each claw took in the last 4 ticks, and where the head would turn
+  if (!S.headPhase) {
+    const dm = side => S.hands[side].hits.filter(k => S.tick - k.t < 4).reduce((a, k) => a + k.d, 0);
+    const pull = clawPull();
+    const where = pull === null ? 'stays' : pull === 1 ? 'MIDDLE' : pull === S.mageSide ? 'MAGE' : 'MELEE';
+    osrsText(g, `Claw dmg: mage ${dm(S.mageSide)} · melee ${dm(S.meleeSide)}`, x + 8, y + 80, '#c9c9c9', 17, 'left');
+    osrsText(g, `Null turns head: ${where}`, x + 8, y + 99, where === 'MAGE' ? '#3ee04f' : where === 'stays' ? '#c9c9c9' : '#ff4a3a', 18, 'left');
   }
 }
 
@@ -2138,6 +2161,11 @@ function drawHand(g, side) {
       g.strokeStyle = '#c58cff'; g.lineWidth = 3; g.beginPath(); for (let a = 0; a < 12; a += .3) { const r = a * 1.05; g.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); } g.stroke();
     }
   }
+  if (S.youTarget === side) {
+    g.strokeStyle = '#ffff00'; g.lineWidth = 2; g.setLineDash([6, 5]);
+    g.beginPath(); g.arc(p.x, p.y - 22, 66, 0, 7); g.stroke(); g.setLineDash([]);
+    osrsText(g, 'YOUR TARGET', p.x, p.y + 42, '#ffff00', 16);
+  }
   if (h.healUntil && S.tick < h.healUntil) osrsText(g, '∞', p.x + 40, p.y - 52, '#3ee04f', 30);
   if (S.wheels) osrsText(g, h.type === 'mage' ? 'Mage hand' : 'Melee hand', p.x, p.y - 76, h.type === 'mage' ? '#9fc4ff' : '#ff9a8e', 16);
 }
@@ -2226,7 +2254,11 @@ cv.addEventListener('click', e => {
   const r = cv.getBoundingClientRect();
   const x = (e.clientX - r.left) * W / r.width;
   const y = (e.clientY - r.top) * H / r.height;
-  if (y < FLOOR_Y) return;
+  if (y < FLOOR_Y) {   // clicking a claw picks your target (click it again to go back to automatic)
+    if (!S.running || S.over || S.headPhase || S.transition) return;
+    for (const side of [0, 2]) { const hp = handPos(side); if (Math.hypot(x - hp.x, y - (hp.y - 20)) < 80) { setYourTarget(side); return; } }
+    return;
+  }
   walkTo(Math.floor(x / TW), Math.floor((y - FLOOR_Y) / TW));
 });
 $$('.sim-controls select, .sim-controls input').forEach(el => el.addEventListener('change', () => el.blur()));
