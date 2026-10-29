@@ -228,8 +228,9 @@ footer { margin-top: 32px; border-top: 2px solid var(--stone-lo); padding-top: 1
         <select id="mode">
           <option value="skip">1 · Mage skip (prayer automatic)</option>
           <option value="set">2 · Set the skip (no counter)</option>
-          <option value="prayer">3 · Prayers only (like Jad)</option>
-          <option value="full">4 · Full fight (skip + prayers)</option>
+          <option value="recover">3 · Get lost &amp; recover</option>
+          <option value="prayer">4 · Prayers only (like Jad)</option>
+          <option value="full">5 · Full fight (skip + prayers)</option>
         </select></div>
       <div class="field"><label for="speed">Speed</label>
         <select id="speed"><option value="0.5" selected>0.5× (learning)</option><option value="0.75">0.75×</option><option value="1">1× (real ticks)</option></select></div>
@@ -561,7 +562,7 @@ const ROT = ['std', 'empty', 'std', 'special'];
 const SPECIALS = [{ id: 'crystal', name: 'Crystal Burst' }, { id: 'lightning', name: 'Lightning' }, { id: 'swap', name: 'Swap' }];
 const SPHERE_PRAY = { red: 'melee', green: 'missiles', purple: 'magic' };
 const STYLE_PRAY = { magic: 'magic', ranged: 'missiles' };
-const autoPray = () => S.mode === 'skip' || S.mode === 'set';
+const autoPray = () => S.mode === 'skip' || S.mode === 'set' || S.mode === 'recover';
 const HEAD = { x: W / 2, y: 64 };
 const MOUTH = { x: W / 2, y: 128 };
 
@@ -636,7 +637,7 @@ function makeState(running) {
   const home = mt({ c: R.home.c, r: skipRow }), mid = mt({ c: R.mid.c, r: skipRow }), right = mt({ c: R.right.c, r: skipRow });
   const mel = mt(LAYOUT.melee), thumb = mt(LAYOUT.thumb);
   const mageSide = mirror ? 2 : 0;
-  const opening = mode !== 'prayer';
+  const opening = mode !== 'prayer' && mode !== 'recover';
   const st0 = opening ? thumb : home;   // phase start: everyone is over at the melee hand
   const you = { name: 'You', you: true, c: st0.c, r: st0.r, pc: st0.c, pr: st0.r, tc: st0.c, tr: st0.r, hitUntil: 0, say: null };
   const mate = { name: 'Melee guy', c: mel.c, r: mel.r, pc: mel.c, pr: mel.r, tc: mel.c, tr: mel.r, home: mel, hitUntil: 0, say: null };
@@ -649,7 +650,9 @@ function makeState(running) {
     mode, mirror, wheels: $('#wheels').checked,
     tickMs: 600 / +$('#speed').value, lastTickAt: performance.now(),
     tick: 0, facing: startFacing, headAngle: (1 - startFacing) * .42,
-    olmActs: 0, seenSpecial: mode !== 'set', setAt: null, opening, crippled: false, reachedLeft: false,
+    olmActs: 0, seenSpecial: mode !== 'set', setAt: null, opening, crippled: false, reachedLeft: !opening,
+    // "Get lost & recover" drill: after a few skips something breaks the skip and the hints go away
+    lost: false, lostAt: 0, nextLostAt: mode === 'recover' ? rand(36, 52) : Infinity, lostSide: null, splashUntil: 0,
     stepIdx: mode === 'set' ? rand(0, 3) : 0, specIdx: rand(0, 2), mouthUntil: 0,
     style: Math.random() < .5 ? 'magic' : 'ranged', catchUp: false,
     players: [you, mate], you, mate, home, mid, right, thumb, portalUntil: 0,
@@ -658,7 +661,7 @@ function makeState(running) {
     hands, mageSide, meleeSide: 2 - mageSide,
     proj: [], events: [], crystals: [], bolts: [], notices: [], splats: [], casts: [], puffs: [],
     icon: null, swapLink: null,
-    stats: { skipped: 0, taken: 0, lost: 0, onMate: 0, pOk: 0, pBad: 0, sOk: 0, sBad: 0, sapped: 0, dmg: 0, react: [], ticks: 0 },
+    stats: { skipped: 0, taken: 0, lost: 0, onMate: 0, recov: [], lostTaken: 0, pOk: 0, pBad: 0, sOk: 0, sBad: 0, sapped: 0, dmg: 0, react: [], ticks: 0 },
     react: null,
   };
 }
@@ -723,6 +726,7 @@ function doTick() {
     }
   }
   due.forEach(e => e.fn());
+  if (S.mode === 'recover') lostEvents();
   if (S.tick % 4 === 2) mageCast();
   if (S.tick % 4 === 1) meleeGuyHit();
   if (S.tick % 4 === 0) olmAct();
@@ -758,8 +762,29 @@ function openingSpec(p) {
   }
 }
 
+// Something breaks the skip right after Basic 1, so the next special gets through.
+function lostEvents() {
+  if (S.lost || S.tick < S.nextLostAt || S.stepIdx % 4 !== 1 || S.tick % 4 !== 1) return;   // the tick right after Basic 1
+  S.lost = true; S.lostAt = S.tick; S.lostSide = null;
+  if (Math.random() < .5) {
+    S.splashUntil = S.tick + 5;
+    notice('You splashed and your melee guy hit the melee hand!', 'bad', 2600);
+    chat('The head will swing to the melee side on the null.', 'olm');
+  } else {
+    S.boundUntil = S.tick + 12;
+    notice('A fire wall trapped you: you can\'t move!', 'bad', 2600);
+  }
+  chat('You lost the skip. Watch where the special lands, then set it again.', 'coach');
+}
+
 function mageCast() {
   if (S.opening) return openingSpec(S.you);
+  if (S.tick < S.splashUntil) {
+    const hp = handPos(S.mageSide);
+    S.casts.push({ t: S.tick, from: S.you, side: S.mageSide });
+    S.events.push({ t: S.tick + 1, fn: () => splat(hp.x, hp.y - 4, 0, 'blue') });
+    return;
+  }
   const h = S.hands[S.mageSide];
   S.casts.push({ t: S.tick, from: S.you, side: S.mageSide });
   if (h.hp <= 0) return;
@@ -774,6 +799,15 @@ function mageCast() {
 // so the mage hand always has the most damage and Olm's head swings to the mage side on the null.
 function meleeGuyHit() {
   if (S.opening) return openingSpec(S.mate);
+  if (S.tick < S.splashUntil) {   // the mistake: he hits the melee hand, so it has the most damage on the null
+    const h = S.hands[S.meleeSide], d = rand(12, 26);
+    S.casts.push({ t: S.tick, from: S.mate, side: S.meleeSide });
+    h.hits.push({ t: S.tick, d });
+    h.hp = Math.max(1, h.hp - d);
+    const hp = handPos(S.meleeSide);
+    S.events.push({ t: S.tick + 1, fn: () => splat(hp.x, hp.y - 4, d, 'red') });
+    return;
+  }
   const h = S.hands[S.mageSide];
   if (h.hp <= 0 || zoneOf(S.mate.c) !== S.meleeSide) return;
   S.casts.push({ t: S.tick, from: S.mate, side: S.mageSide });
@@ -827,7 +861,12 @@ function olmAct() {
       const sp = SPECIALS[S.specIdx % 3]; S.specIdx++;
       S.stats.skipped++;
       S.you.say = { text: 'Skipped!', until: performance.now() + 1500 };
-      if (S.mode === 'set' && S.setAt === null) {
+      if (S.lost) {
+        const secs = (S.tick - S.lostAt) * .6;
+        S.stats.recov.push(secs);
+        S.lost = false; S.lostSide = null; S.nextLostAt = S.tick + rand(48, 80);
+        notice(`Recovered! Skip set again in ${secs.toFixed(1)} s`, 'good', 2800);
+      } else if (S.mode === 'set' && S.setAt === null) {
         S.setAt = S.stats.ticks;
         notice(`Skip SET in ${(S.setAt * .6).toFixed(1)} s!`, 'good', 2600);
       } else notice(`${sp.name} SKIPPED`, 'good', 2000);
@@ -896,6 +935,7 @@ function landProj(pr) {
 function doSpecial(sp) {
   S.icon = { id: sp.id, until: S.tick + 3 };
   S.seenSpecial = true;
+  if (S.lost) { S.stats.lostTaken++; S.lostSide = S.facing === S.mageSide ? 'mage' : 'melee'; }
   if (zoneOf(S.you.c) !== S.facing) {
     S.stats.onMate++;
     notice(`${sp.name} on your melee guy. Count from here!`, 'info', 2400);
@@ -963,7 +1003,7 @@ function startRun() {
   $('#ov').hidden = true;
   $('#pauseBtn').textContent = 'Pause';
   chatEl.innerHTML = '';
-  chat(S.mode === 'prayer' ? 'Pray against every attack. Prayer orbs: switch after launch.' : 'Phase start: spec the melee hand until it cripples, then go LEFT and set the head.', 'coach');
+  chat(S.mode === 'prayer' ? 'Pray against every attack. Prayer orbs: switch after launch.' : S.mode === 'recover' ? 'The skip is running. Keep it going until something breaks it, then recover.' : 'Phase start: spec the melee hand until it cripples, then go LEFT and set the head.', 'coach');
   updateHUD();
 }
 function togglePause(force) {
@@ -981,6 +1021,10 @@ function summaryHTML(died) {
   const avg = st.react.length ? Math.round(st.react.reduce((a, b) => a + b, 0) / st.react.length) + ' ms' : '—';
   const rows = [];
   if (S.mode === 'set') rows.push(['Time to set the skip', S.setAt === null ? 'not set' : (S.setAt * .6).toFixed(1) + ' s']);
+  if (S.mode === 'recover') {
+    const r = st.recov;
+    rows.push(['Recoveries', r.length], ['Avg time to recover', r.length ? (r.reduce((a, b) => a + b, 0) / r.length).toFixed(1) + ' s' : '—'], ['Specials while lost', st.lostTaken]);
+  }
   if (S.mode !== 'prayer') rows.push(['Specials skipped', `${st.skipped} / ${st.skipped + st.taken}`]);
   if (!autoPray()) {
     rows.push(['Correct prayers', pt ? `${st.pOk} / ${pt} (${Math.round(st.pOk / pt * 100)}%)` : '—']);
@@ -1010,9 +1054,16 @@ function endRun(died) {
 
 /* ---- coaching (training wheels) ---- */
 function coach() {
+  if (S.running && !S.over && !S.wheels && S.lost && !S.lostSide) return { text: 'LOST! Find your count again', target: null };
   if (!S.running || S.over || !S.wheels || S.mode === 'prayer') return null;
   if (S.tick < S.portalUntil) return { text: 'SWAP! Meet at the THUMB tile', target: S.thumb, hot: true };
   if (S.opening) return { text: 'Phase start: everyone spec the MELEE hand', target: null };
+  if (S.lost) {
+    if (!S.lostSide) return { text: 'LOST! Watch where the next special lands', target: null };
+    return S.lostSide === 'melee'
+      ? { text: 'It hit the MELEE side: go LEFT, tank Basic 2 MIDDLE, then RIGHT', target: null }
+      : { text: 'It hit YOUR side: count Basic 1, Null, Basic 2 (MIDDLE), then RIGHT', target: null };
+  }
   if (S.crippled && !S.reachedLeft) {
     if (S.you.c === S.home.c && S.you.r === S.home.r) S.reachedLeft = true;
     else return { text: 'Melee hand crippled! Go LEFT to set the head', target: S.home, hot: true };
@@ -1046,15 +1097,17 @@ function updateHUD() {
   const st = S.stats; const pt = st.pOk + st.pBad;
   const rows = [];
   if (S.mode !== 'prayer') rows.push(['Specials skipped', st.skipped], ['Specials taken', st.taken]);
+  if (S.mode === 'recover') rows.push(['Recoveries', st.recov.length]);
   if (!autoPray()) rows.push(['Prayer accuracy', pt ? Math.round(st.pOk / pt * 100) + '%' : '—'], ['Spheres blocked', `${st.sOk}/${st.sOk + st.sBad}`]);
   rows.push(['Damage taken', st.dmg]);
   $('#stats').innerHTML = rows.map(r => `<span>${r[0]}</span><b>${r[1]}</b>`).join('');
   // order tracker: hidden highlights in the "Set the skip" drill (you find it yourself) and with training wheels off
-  const showNext = S.running && S.wheels && S.mode !== 'set';
+  const showNext = S.running && S.wheels && S.mode !== 'set' && !S.lost;
   $$('#trkCycle div').forEach((d, i) => d.classList.toggle('next', showNext && i === S.stepIdx % 4));
   $$('#trkSpec div').forEach((d, i) => d.classList.toggle('next', showNext && S.mode !== 'prayer' && i === S.specIdx % 3));
   const mh = S.hands[S.meleeSide];
-  $('#trkTip').innerHTML = S.opening ? '<span class="trk-flag">Phase start:</span> spec the melee hand until it cripples.'
+  $('#trkTip').innerHTML = S.lost ? '<span class="trk-flag">LOST.</span> Watch which side the next special lands on, then set the head again.'
+    : S.opening ? '<span class="trk-flag">Phase start:</span> spec the melee hand until it cripples.'
     : mh.clench ? `<span class="trk-flag">Melee hand crippled: no specials for ${mh.clench - S.tick} ticks.</span> Go left and set the head now.`
     : '<b>Lost?</b> Wait for the next special and find it in the specials order. Then count <b>Basic 1, Null, Basic 2</b>, and the next special is the one after it.';
 }
@@ -1211,7 +1264,7 @@ function draw(now) {
   S.splats.forEach(s => drawHitsplat(g, s, now));
 
   // RuneLite-style overlay (training wheels)
-  if (S.running && S.wheels && S.mode !== 'set') drawOverlay(g);
+  if (S.running && S.wheels && S.mode !== 'set' && !S.lost) drawOverlay(g);
 
   // coach line (yellow overhead-style text)
   if (co) {
