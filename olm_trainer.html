@@ -1,0 +1,1388 @@
+<meta charset="utf-8">
+<title>Olm Skip Trainer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Pixelify+Sans:wght@400;600&family=VT323&display=swap">
+<style>
+/* Layout: OSRS client feel. Stone-brown interface panels around a top-down game view,
+   parchment chatbox + orbs/prayer panel underneath, then "How it works" and Quiz tabs.
+   Single deliberate dark look (the game client is always dark). */
+:root {
+  --bg: #15120e;
+  --stone: #3e3529;
+  --stone-2: #2e271e;
+  --stone-hi: #5f5240;
+  --stone-lo: #1d1813;
+  --fg: #f1e6c8;
+  --muted: #b3a385;
+  --orange: #ff981f;
+  --yellow: #ffff00;
+  --good: #3ee04f;
+  --bad: #ff4a3a;
+  --magic: #6aa8ff;
+  --missiles: #62d36a;
+  --melee: #ff5a4e;
+  --parch: #cdb98f;
+  --parch-ink: #1d150c;
+  --font-ui: "Pixelify Sans", "Trebuchet MS", system-ui, sans-serif;
+  --font-body: "Alegreya Sans", "Segoe UI", system-ui, sans-serif;
+  --font-num: "VT323", ui-monospace, Consolas, monospace;
+  color-scheme: dark;
+}
+html { background: var(--bg); }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 17px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 48px;
+}
+.wrap { max-width: 1000px; margin: 0 auto; }
+h1, h2, h3 { font-family: var(--font-ui); font-weight: 600; text-wrap: balance; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(1.9rem, 5vw, 2.6rem); color: var(--orange); text-shadow: 2px 2px 0 #000; }
+h2 { font-size: 1.45rem; color: var(--orange); text-shadow: 1px 1px 0 #000; }
+h3 { font-size: 1.12rem; color: var(--yellow); text-shadow: 1px 1px 0 #000; }
+p { margin: 0; }
+a { color: #8fd0ff; }
+.muted { color: var(--muted); }
+.eyebrow { font-family: var(--font-ui); font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: var(--orange); }
+kbd { font-family: var(--font-num); font-size: 1.05rem; background: var(--stone-2); border: 1px solid var(--stone-hi); border-bottom-width: 2px; border-radius: 3px; padding: 0 .4em; color: var(--yellow); }
+
+/* stone panel, like the OSRS interface */
+.stone {
+  background: linear-gradient(180deg, var(--stone) 0%, #382f24 100%);
+  border: 2px solid var(--stone-lo);
+  box-shadow: inset 1px 1px 0 var(--stone-hi), inset -1px -1px 0 #241e17;
+  border-radius: 4px;
+}
+
+header.top { padding-block: 22px 4px; display: flex; align-items: end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+header.top .sub { color: var(--muted); font-size: .95rem; }
+
+nav.tabs { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg);
+  display: flex; gap: 4px; margin-block: 12px 18px; overflow-x: auto; padding-top: 6px; border-bottom: 2px solid var(--stone-lo); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+nav.tabs button {
+  font-family: var(--font-ui); font-size: 1.05rem; color: var(--muted); cursor: pointer; white-space: nowrap;
+  background: var(--stone-2); border: 2px solid var(--stone-lo); border-bottom: 0; border-radius: 5px 5px 0 0; padding: 7px 16px 6px;
+}
+nav.tabs button[aria-selected="true"] { color: var(--orange); background: var(--stone); box-shadow: inset 1px 1px 0 var(--stone-hi); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
+
+section.panel { display: grid; gap: 18px; }
+.block { display: grid; gap: 10px; }
+
+.btn {
+  font-family: var(--font-ui); font-size: .98rem; color: var(--orange); cursor: pointer;
+  background: linear-gradient(180deg, #4a3f31, #362d22); border: 2px solid var(--stone-lo); border-radius: 4px;
+  box-shadow: inset 1px 1px 0 var(--stone-hi); padding: 6px 14px;
+}
+.btn:hover { color: var(--yellow); }
+.btn.primary { color: #1c1408; background: linear-gradient(180deg, #ffb347, #e98a12); border-color: #6b3d05; box-shadow: inset 1px 1px 0 #ffd38a; }
+.btn.right { color: var(--good); border-color: var(--good); }
+.btn.wrong { color: var(--bad); border-color: var(--bad); }
+
+/* controls */
+.sim-controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; padding: 10px 12px; }
+.field { display: grid; gap: 3px; }
+.field label { font-family: var(--font-ui); font-size: .76rem; letter-spacing: .06em; text-transform: uppercase; color: var(--orange); }
+select { font-family: var(--font-body); font-size: .98rem; background: var(--stone-2); color: var(--fg); border: 2px solid var(--stone-lo); border-radius: 4px; padding: 5px 6px; }
+.check { display: flex; gap: 6px; align-items: center; font-size: .95rem; padding-bottom: 6px; }
+.ctrl-btns { display: flex; gap: 8px; margin-left: auto; }
+
+/* game view */
+.stage { position: relative; padding: 6px; }
+.stage canvas { display: block; width: 100%; height: auto; max-width: 100%; touch-action: manipulation; cursor: pointer; border: 1px solid #000; }
+.overlay { position: absolute; inset: 6px; display: grid; place-items: center; background: rgba(10,8,6,.78); padding: 16px; }
+.overlay .box { max-width: 470px; display: grid; gap: 12px; text-align: center; justify-items: center; padding: 18px; }
+.overlay .box h3 { font-size: 1.5rem; color: var(--orange); }
+.sumgrid { display: grid; grid-template-columns: 1fr auto; gap: 4px 18px; text-align: left; font-variant-numeric: tabular-nums; }
+.sumgrid span:nth-child(even) { font-family: var(--font-num); font-size: 1.25rem; color: var(--yellow); text-align: right; }
+
+/* under the game view */
+.below { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 10px; }
+@media (max-width: 760px) { .below { grid-template-columns: 1fr; } }
+.chatbox {
+  background: linear-gradient(180deg, #d4c197, #c2ad82); color: var(--parch-ink);
+  border: 2px solid var(--stone-lo); box-shadow: inset 0 0 0 2px #8c7650; border-radius: 4px;
+  padding: 8px 10px; min-height: 182px; display: flex; flex-direction: column; gap: 6px; min-width: 0;
+}
+.chat-tabs { display: flex; gap: 6px; font-family: var(--font-ui); font-size: .8rem; }
+.chat-tabs span { background: #6e5a3c; color: #ffe9b0; padding: 1px 8px; border-radius: 3px; }
+.chat-lines { font-family: var(--font-num); font-size: 1.15rem; line-height: 1.15; display: grid; align-content: end; gap: 1px; flex: 1; overflow: hidden; max-height: 150px; }
+.chat-lines div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-lines .bad { color: #9c0000; }
+.chat-lines .good { color: #005f00; }
+.chat-lines .coach { color: #0a2f9c; }
+.chat-lines .olm { color: #6b2a8c; }
+
+.side { padding: 10px; display: grid; gap: 10px; align-content: start; }
+.orbs { display: flex; gap: 14px; align-items: center; justify-content: center; }
+.orb { display: flex; align-items: center; gap: 6px; }
+.orb .ball { width: 46px; height: 46px; border-radius: 50%; border: 3px solid #1a1510; position: relative; overflow: hidden; background: #101010; box-shadow: 0 0 0 2px #5f5240; }
+.orb .ball i { position: absolute; left: 0; right: 0; bottom: 0; transition: height .25s; }
+.orb.hp .ball i { background: radial-gradient(circle at 40% 30%, #ff6a5a, #9b1408); }
+.orb.pp .ball i { background: radial-gradient(circle at 40% 30%, #8fe8ff, #1f6fa8); }
+.orb .ball svg { position: absolute; inset: 8px; width: 24px; height: 24px; }
+.orb .num { font-family: var(--font-num); font-size: 1.6rem; line-height: 1; text-shadow: 1px 1px 0 #000; color: var(--good); font-variant-numeric: tabular-nums; min-width: 2ch; }
+.prayers { display: flex; gap: 8px; justify-content: center; }
+.pray-btn { width: 64px; display: grid; justify-items: center; gap: 2px; padding: 6px 2px 4px; cursor: pointer; border-radius: 6px; border: 2px solid var(--stone-lo); background: var(--stone-2); color: var(--muted); font-family: var(--font-num); font-size: 1rem; }
+.pray-btn svg { width: 34px; height: 34px; }
+.pray-btn.on { background: radial-gradient(circle, #f4e7a8 0%, #c9b46a 55%, #6d5d34 100%); color: #20180a; border-color: #8a7a43; }
+.supplies { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.supplies .btn { font-size: .9rem; padding: 5px 10px; }
+.walkbtns { display: flex; gap: 8px; }
+.walkbtns .btn { flex: 1; }
+.statgrid { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; font-size: .95rem; }
+.statgrid b { font-family: var(--font-num); font-weight: 400; font-size: 1.2rem; color: var(--yellow); text-align: right; font-variant-numeric: tabular-nums; }
+.keys { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .9rem; color: var(--muted); padding: 2px 4px; }
+
+/* how-it-works + quiz */
+.card { padding: 14px 16px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
+.tell-row { display: grid; grid-template-columns: 56px 1fr; gap: 12px; align-items: center; padding-block: 6px; border-bottom: 1px solid #2a231a; }
+.tell-row:last-child { border-bottom: 0; }
+.tell-row svg { width: 50px; height: 50px; }
+.pill { display: inline-block; font-family: var(--font-num); font-size: 1.1rem; line-height: 1.2; padding: 0 .5em; border-radius: 3px; color: #10130f; }
+.pill.magic { background: var(--magic); } .pill.missiles { background: var(--missiles); } .pill.melee { background: var(--melee); }
+.steps { display: grid; gap: 10px; }
+.step { display: grid; grid-template-columns: 44px 1fr; gap: 12px; align-items: start; padding: 12px 14px; }
+.step .n { font-family: var(--font-ui); font-size: 1.6rem; color: var(--orange); text-shadow: 1px 1px 0 #000; line-height: 1; text-align: center; }
+.step p { max-width: 66ch; }
+.loop { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; max-width: 560px; }
+.loop div { background: var(--stone-2); border: 2px solid var(--stone-lo); border-radius: 4px; padding: 7px 4px; text-align: center; font-family: var(--font-ui); font-size: .9rem; line-height: 1.2; }
+.loop .go { color: var(--yellow); border-color: #8a7a1a; }
+.loop .ok { color: var(--good); border-color: #1f6a28; }
+.quote { font-style: italic; color: var(--fg); }
+.src { font-size: .85rem; color: var(--muted); }
+
+.quiz { padding: 16px; display: grid; gap: 14px; }
+.quiz-head { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: baseline; }
+.quiz-body { display: grid; grid-template-columns: 96px 1fr; gap: 16px; align-items: center; }
+.quiz-body svg { width: 88px; height: 88px; }
+.quiz-opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.quiz-why { min-height: 1.5em; }
+.score { font-family: var(--font-num); font-size: 1.3rem; color: var(--yellow); }
+
+footer { margin-top: 32px; border-top: 2px solid var(--stone-lo); padding-top: 14px; color: var(--muted); font-size: .9rem; display: grid; gap: 6px; }
+
+@media (max-width: 560px) {
+  .quiz-body { grid-template-columns: 1fr; justify-items: start; }
+  body { font-size: 16px; }
+  .ctrl-btns { margin-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .orb .ball i { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <span class="eyebrow">Chambers of Xeric · Great Olm</span>
+      <h1>Olm Skip Trainer</h1>
+    </div>
+    <span class="sub">Duo/trio mage skip · prayer drills · tile-pack layout</span>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" id="tab-sim" aria-controls="sim" aria-selected="true" data-tab="sim">Play</button>
+    <button role="tab" id="tab-learn" aria-controls="learn" aria-selected="false" data-tab="learn">How it works</button>
+    <button role="tab" id="tab-quiz" aria-controls="quiz" aria-selected="false" data-tab="quiz">Quiz</button>
+  </nav>
+
+  <!-- ===================== SIM ===================== -->
+  <section class="panel" id="sim" role="tabpanel" aria-labelledby="tab-sim">
+    <div class="sim-controls stone">
+      <div class="field"><label for="mode">Drill</label>
+        <select id="mode">
+          <option value="skip">1 · Mage skip (prayer automatic)</option>
+          <option value="set">2 · Set the skip (no counter)</option>
+          <option value="prayer">3 · Prayers only (like Jad)</option>
+          <option value="full">4 · Full fight (skip + prayers)</option>
+        </select></div>
+      <div class="field"><label for="speed">Speed</label>
+        <select id="speed"><option value="0.5" selected>0.5× (learning)</option><option value="0.75">0.75×</option><option value="1">1× (real ticks)</option></select></div>
+      <div class="field"><label for="route">Route</label>
+        <select id="route"><option value="short" selected>3 tiles at the head</option><option value="long">From the mage-hand tile</option></select></div>
+      <div class="field"><label for="skipRow">Route row</label>
+        <select id="skipRow"><option value="1" selected>Row 1 (against the wall)</option><option value="3">Row 3 (WDR mage tank)</option></select></div>
+      <div class="field"><label for="orbStyle">Prayer orbs look like</label>
+        <select id="orbStyle"><option value="osrs">OSRS default</option><option value="toa">ToA prayer orbs (scimitar / arrow / blue orb)</option></select></div>
+      <label class="check"><input type="checkbox" id="wheels" checked> Training wheels</label>
+      <label class="check"><input type="checkbox" id="mirror"> Mirrored room</label>
+      <div class="ctrl-btns">
+        <button class="btn primary" id="startBtn">Start</button>
+        <button class="btn" id="pauseBtn">Pause</button>
+        <button class="btn" id="endBtn">End</button>
+      </div>
+    </div>
+
+    <div class="stage stone">
+      <canvas id="cv" width="720" height="534" aria-label="Top-down Olm room. Click a tile to walk there."></canvas>
+      <div class="overlay" id="ov">
+        <div class="box stone" id="ovbox">
+          <h3>You're the mage</h3>
+          <p>Your melee guy stays on the melee side (right). You start <b>LEFT</b> on the mage side and cast at the mage hand automatically.</p>
+          <p>The route is <b>MIDDLE → RIGHT → LEFT</b>: tank basic 2 on the middle tile, step right for the special, run back left when the head turns. Follow the yellow text, or press <b>1 2 3</b>.</p>
+          <button class="btn primary" id="ovStart">Start</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="below">
+      <div class="chatbox">
+        <div class="chat-tabs"><span>All</span><span>Game</span></div>
+        <div class="chat-lines" id="chat" aria-live="polite"></div>
+      </div>
+      <div class="side stone">
+        <div class="orbs">
+          <div class="orb hp"><div class="ball"><i id="hpFill" style="height:100%"></i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z" fill="#fff" opacity=".85"/></svg></div><span class="num" id="hpTxt">99</span></div>
+          <div class="orb pp"><div class="ball"><i id="ppFill" style="height:100%"></i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.2 6.3H21l-5.4 4 2 6.6L12 16l-5.6 3.9 2-6.6L3 9.3h6.8z" fill="#fff" opacity=".85"/></svg></div><span class="num" id="ppTxt">99</span></div>
+        </div>
+        <div class="prayers">
+          <button class="pray-btn" data-p="magic" title="Protect from Magic (Q)"></button>
+          <button class="pray-btn" data-p="missiles" title="Protect from Missiles (W)"></button>
+          <button class="pray-btn" data-p="melee" title="Protect from Melee (E)"></button>
+        </div>
+        <div class="supplies">
+          <button class="btn" id="eatBtn">Shark ×10 (F)</button>
+          <button class="btn" id="restoreBtn">Restore ×6 (R)</button>
+        </div>
+        <div class="walkbtns"><button class="btn" id="goHome">1 · Left</button><button class="btn" id="goMid">2 · Middle</button><button class="btn" id="goRight">3 · Right</button></div>
+        <div class="statgrid" id="stats"></div>
+      </div>
+    </div>
+    <div class="keys">
+      <span>Click a tile to walk · <kbd>1</kbd> left · <kbd>2</kbd> middle · <kbd>3</kbd> right · arrows step</span>
+      <span><kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd> prayers</span>
+      <span><kbd>F</kbd> eat · <kbd>R</kbd> restore · <kbd>P</kbd> pause</span>
+    </div>
+  </section>
+
+  <!-- ===================== HOW IT WORKS ===================== -->
+  <section class="panel" id="learn" role="tabpanel" aria-labelledby="tab-learn" hidden>
+    <div class="card stone">
+      <span class="eyebrow">The idea in one line</span>
+      <h2>Olm can only hit the side it's looking at. When the special is due, nobody is on that side, so Olm loses it.</h2>
+    </div>
+
+    <div class="block">
+      <h2>Olm's rhythm (one action every 4 ticks)</h2>
+      <div class="loop">
+        <div>Basic 1<br><small>→ melee guy</small></div>
+        <div>Null<br><small>head turns to you</small></div>
+        <div class="go">Basic 2<br><small>you tank it, MIDDLE</small></div>
+        <div class="ok">Special<br><small>you're RIGHT = skipped</small></div>
+      </div>
+      <p class="muted"><b>What counts as a basic:</b> anything fired from Olm's head: magic, ranged, coloured spheres, burn, fire wall, acid. <b>Not basics:</b> Crystal Burst, Lightning and Swap (and the healing hand later).</p>
+    </div>
+
+    <div class="block">
+      <h2>The mage skip, step by step</h2>
+      <div class="steps">
+        <div class="step stone"><span class="n">1</span><div class="block" style="gap:4px"><h3>Roles</h3><p><b>You</b> are on the mage side (left) on long range, hitting the mage hand. A thrall helps, because splashes break the skip. <b>Your melee guy</b> stays on the melee side (right) and also attacks the <b>mage hand</b> from range. He must never step past his marked tile, or the head looks at the centre.</p></div></div>
+        <div class="step stone"><span class="n">2</span><div class="block" style="gap:4px"><h3>Why the head comes to you</h3><p>On the <b>null</b>, Olm doesn't attack. Its head swings toward the claw that took the most damage in the last 4 ticks. You're both hitting the mage hand, so the head comes to your side every cycle. That's why Basic 2 is yours.</p></div></div>
+        <div class="step stone"><span class="n">3</span><div class="block" style="gap:4px"><h3>The loop: MIDDLE → RIGHT → LEFT</h3><p>You only need <b>3 tiles at the head</b>: the tile left of the head, the centre, and the tile right of the head (the pack's two head tiles plus the centre). Tank <b>Basic 2</b> on the <b>centre tile</b>. Then step <b>one tile right</b>, out of the mage-side view. When the special is due, Olm sees nobody on your side, turns its head right, and loses the special. <b>As soon as the head turns, run back LEFT.</b></p></div></div>
+        <div class="step stone"><span class="n">4</span><div class="block" style="gap:4px"><h3>Setting it (start of a phase or after it breaks)</h3><p>Tank 2 basics. On the 2nd, the head must be turned <b>fully</b> to your side. Then step right, and go back left when the head turns. The skip is set. Shortcut: if a special lands while the head faces the melee side, run left and it's set. If a special lands while the head faces your side, tank one, step right, and it's set.</p></div></div>
+        <div class="step stone"><span class="n">5</span><div class="block" style="gap:4px"><h3>Timing tips</h3><p>Click as soon as you see the head <i>start</i> to move; the turn has already happened. Your click takes effect on the next tick, so click one tick early. Tank Basic 2 on the middle tile so a fire wall can't trap you.</p></div></div>
+      </div>
+    </div>
+
+    <div class="grid3">
+      <div class="card stone"><span class="eyebrow">#1 mistake</span><p>Running right as soon as the head turns to you. You <b>must tank Basic 2 in the middle first</b>. If you leave early, Olm loses a basic instead and the special still comes.</p></div>
+      <div class="card stone"><span class="eyebrow">It broke</span><p>You start seeing specials again (Crystal Burst, Swap, Lightning). Don't panic: look at which side the special happened on, then set it again (step 4).</p></div>
+      <div class="card stone"><span class="eyebrow">Melee guy breaks it</span><p>Hitting the melee hand harder than you hit the mage hand, or stepping past his tile, makes the head go the wrong way on the null.</p></div>
+    </div>
+
+    <div class="card stone">
+      <span class="eyebrow">Plugins the guides use</span>
+      <p><b>Chambers of Xeric Additions</b> (Buchus): Olm side highlight, claw HP overlay, phase panel, and a "Replace Olm Orbs" option. <b>Visual Metronome</b> set to a 4-tick cycle. <b>Tile Packs</b>: "CoX Olm standard" (the yellow tiles in the trainer).</p>
+      <p class="src">Sources: <a href="https://www.youtube.com/watch?v=8Ta9VkVaJ7M" target="_blank" rel="noopener">Synq, The EASIEST Mage Skipping Guide (Duo Olm)</a> · <a href="https://www.youtube.com/watch?v=GzoqUGXDQFg" target="_blank" rel="noopener">Qevon, Mage Skip for Dummies</a> · <a href="https://www.youtube.com/watch?v=714IJM8Xjs0" target="_blank" rel="noopener">Daep, Melee &amp; Mage Skip guide</a> · <a href="https://oldschool.runescape.wiki/w/Chambers_of_Xeric/Strategies" target="_blank" rel="noopener">OSRS Wiki</a></p>
+    </div>
+
+    <div class="block">
+      <h2>Mage or melee?</h2>
+      <div class="grid3">
+        <div class="card stone">
+          <span class="eyebrow">Which claw</span>
+          <div class="tell-row"><svg viewBox="0 0 60 60" aria-hidden="true" id="ic-bolt"></svg><p>Flashes a special icon = <b>melee</b></p></div>
+          <div class="tell-row"><svg viewBox="0 0 60 60" aria-hidden="true" id="ic-fist"></svg><p>Clenches into a fist = <b>melee</b></p></div>
+          <div class="tell-row"><svg viewBox="0 0 60 60" aria-hidden="true" id="ic-claw"></svg><p>"Right claw" on hover = <b>mage</b></p></div>
+        </div>
+        <div class="card stone">
+          <span class="eyebrow">Olm's attacks</span>
+          <div class="tell-row"><svg viewBox="0 0 60 60" aria-hidden="true" id="ic-magic"></svg><p><span id="lg-magic">Green orb</span>: <span class="pill magic">MAGE</span></p></div>
+          <div class="tell-row"><svg viewBox="0 0 60 60" aria-hidden="true" id="ic-ranged"></svg><p><span id="lg-ranged">Crystal shard</span>: <span class="pill missiles">RANGE</span></p></div>
+          <p class="muted">Olm's normal attacks. The coloured prayer orbs are on the right.</p>
+        </div>
+        <div class="card stone">
+          <span class="eyebrow">Spheres (switch after launch)</span>
+          <div class="tell-row"><svg viewBox="0 0 60 60" aria-hidden="true" id="ic-red"></svg><p><span id="lg-red">Red sphere</span>: <span class="pill melee">MELEE</span></p></div>
+          <div class="tell-row"><svg viewBox="0 0 60 60" aria-hidden="true" id="ic-green"></svg><p><span id="lg-green">Green sphere</span>: <span class="pill missiles">RANGE</span></p></div>
+          <div class="tell-row"><svg viewBox="0 0 60 60" aria-hidden="true" id="ic-purple"></svg><p><span id="lg-purple">Purple sphere</span>: <span class="pill magic">MAGE</span></p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== QUIZ ===================== -->
+  <section class="panel" id="quiz" role="tabpanel" aria-labelledby="tab-quiz" hidden>
+    <div class="quiz stone" id="quizbox">
+      <div class="quiz-head"><span class="eyebrow" id="qz-cat">Identify</span><span class="score" id="qz-score">0 / 0 · streak 0</span></div>
+      <div class="quiz-body"><div id="qz-art"></div><div class="block"><p id="qz-q"></p><div class="quiz-opts" id="qz-opts"></div></div></div>
+      <p class="quiz-why muted" id="qz-why"></p>
+      <div><button class="btn primary" id="qz-next">Next question</button></div>
+    </div>
+  </section>
+
+  <footer>
+    <p>Mechanics: OSRS Wiki <a href="https://oldschool.runescape.wiki/w/Great_Olm" target="_blank" rel="noopener">Great Olm</a> and <a href="https://oldschool.runescape.wiki/w/Chambers_of_Xeric/Strategies" target="_blank" rel="noopener">CoX Strategies</a>. Tiles: WeDoRaids Olm pack (<a href="https://runemarkers.net/olm" target="_blank" rel="noopener">runemarkers.net/olm</a>). Method reference: <a href="https://www.youtube.com/watch?v=GzoqUGXDQFg" target="_blank" rel="noopener">Qevon, How to Mage Skip on Olm for Dummies</a>.</p>
+    <p>This is a training model. Tick timing, the attack loop, head turning and catch-up follow the wiki. Zone edges, damage and special effects are simplified.</p>
+  </footer>
+</div>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+
+/* ---------------- attack looks ---------------- */
+const SPHERE_COL = { red: '#ff4a3d', green: '#4fe36a', purple: '#b46dff' };
+const OSRS_AUTOS = {
+  magic: { name: 'Green orb', core: '#5fe05a', hi: '#eaffd8', lo: '#1d6b22', shape: 'orb' },
+  ranged: { name: 'Crystal shard', core: '#c9f4ff', hi: '#ffffff', lo: '#5fb9cf', shape: 'shard' },
+};
+// "Replace Olm Orbs" (Chambers of Xeric Additions): the prayer spheres become Tombs of Amascut projectiles
+const LOOKS = {
+  osrs: { ...OSRS_AUTOS, toaSpheres: false },
+  toa: { ...OSRS_AUTOS, toaSpheres: true },
+};
+const TOA_COL = { red: '#ff3b30', green: '#ffffff', purple: '#3b8cff' };
+const TOA_NAME = { red: 'Red scimitar', green: 'White arrow', purple: 'Blue orb' };
+const sphereCol = c => look.toaSpheres ? TOA_COL[c] : SPHERE_COL[c];
+const sphereName = c => look.toaSpheres ? TOA_NAME[c] : c[0].toUpperCase() + c.slice(1) + ' sphere';
+let look = LOOKS.osrs;
+
+/* ---------------- svg art ---------------- */
+const orbSVG = l => `<defs><radialGradient id="g${l.core.slice(1)}" cx=".38" cy=".33"><stop offset="0" stop-color="${l.hi}"/><stop offset=".45" stop-color="${l.core}"/><stop offset="1" stop-color="${l.lo}"/></radialGradient></defs><circle cx="30" cy="30" r="21" fill="${l.core}" opacity=".18"/><circle cx="30" cy="30" r="14" fill="url(#g${l.core.slice(1)})"/>`;
+const shardSVG = l => `<polygon points="30,10 39,27 31,48 21,29" fill="${l.core}" stroke="${l.lo}" stroke-width="2"/><polygon points="30,10 31,48 21,29" fill="${l.lo}" opacity=".55"/>`;
+const art = {
+  magic: () => orbSVG(look.magic),
+  ranged: () => look.ranged.shape === 'orb' ? orbSVG(look.ranged) : shardSVG(look.ranged),
+  sphere: c => look.toaSpheres ? TOA_SVG[c] : `<circle cx="30" cy="30" r="24" fill="${SPHERE_COL[c]}" opacity=".16"/><circle cx="30" cy="30" r="18" fill="${SPHERE_COL[c]}" fill-opacity=".38" stroke="${SPHERE_COL[c]}" stroke-width="4"/><path d="M30 20 a10 10 0 1 1 -9 6 a6 6 0 1 0 9 -3" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>`,
+  bolt: () => `<circle cx="30" cy="30" r="24" fill="#2b2a14"/><polygon points="33,8 18,33 28,33 24,52 42,25 31,25" fill="#ffe25a"/>`,
+  fist: () => `<rect x="14" y="18" width="32" height="28" rx="10" fill="#e6e8e0" stroke="#7d8577" stroke-width="2"/><path d="M22 30v14M30 30v14M38 30v14" stroke="#7d8577" stroke-width="2"/>`,
+  claw: () => `<ellipse cx="30" cy="24" rx="14" ry="10" fill="#e6e8e0" stroke="#7d8577" stroke-width="2"/><path d="M19 28 L13 50 M26 31 L25 54 M34 31 L35 54 M41 28 L47 50" stroke="#e6e8e0" stroke-width="5" stroke-linecap="round"/>`,
+};
+// prayer icons (stylised OSRS prayer book)
+const PRAY_SVG = {
+  magic: `<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="13" fill="#2a63c9"/><circle cx="20" cy="20" r="13" fill="none" stroke="#9fd0ff" stroke-width="2"/><path d="M20 9 L23 18 L31 20 L23 22 L20 31 L17 22 L9 20 L17 18 Z" fill="#e8f4ff"/></svg>`,
+  missiles: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M8 32 L28 12" stroke="#6b4a22" stroke-width="3" stroke-linecap="round"/><path d="M26 8 L33 7 L32 14 Z" fill="#c9d4d8"/><path d="M8 32 L6 26 M8 32 L14 34" stroke="#3fae46" stroke-width="3" stroke-linecap="round"/></svg>`,
+  melee: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M10 30 L28 12" stroke="#d9dde0" stroke-width="5" stroke-linecap="round"/><path d="M28 12 L32 8" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/><path d="M8 26 L14 32" stroke="#8a5a20" stroke-width="4" stroke-linecap="round"/><path d="M7 33 L10 30" stroke="#8a5a20" stroke-width="4" stroke-linecap="round"/></svg>`,
+};
+const PRAY_LABEL = { magic: 'MAGE', missiles: 'RANGE', melee: 'MELEE' };
+$$('.pray-btn').forEach(b => { b.innerHTML = PRAY_SVG[b.dataset.p] + `<span>${'QWE'['magic missiles melee'.split(' ').indexOf(b.dataset.p)]} · ${PRAY_LABEL[b.dataset.p]}</span>`; });
+
+const TOA_SVG = {
+  red: `<circle cx="30" cy="30" r="25" fill="#ff3b30" opacity=".18"/><g transform="rotate(-35 30 30)"><path d="M14 34 Q30 12 48 22 Q34 22 18 38 Z" fill="#ff6a5c" stroke="#ffd0c8" stroke-width="1.5"/><rect x="10" y="35" width="10" height="4" rx="1" transform="rotate(-40 15 37)" fill="#7a1a12"/></g>`,
+  green: `<circle cx="30" cy="30" r="25" fill="#ffffff" opacity=".14"/><path d="M12 44 L44 16" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/><path d="M44 16 L36 17 M44 16 L43 24" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/><path d="M12 44 L10 37 M12 44 L19 46" stroke="#dfe8ff" stroke-width="2"/>`,
+  purple: `<defs><radialGradient id="toab" cx=".4" cy=".35"><stop offset="0" stop-color="#e6f2ff"/><stop offset=".45" stop-color="#3b8cff"/><stop offset="1" stop-color="#0d2f80"/></radialGradient></defs><circle cx="30" cy="30" r="24" fill="#3b8cff" opacity=".22"/><circle cx="30" cy="30" r="14" fill="url(#toab)"/><path d="M30 20 a10 10 0 1 1 -9 6" fill="none" stroke="#e6f2ff" stroke-width="2"/>`,
+};
+const svg = inner => `<svg viewBox="0 0 60 60" aria-hidden="true">${inner}</svg>`;
+function renderLegend() {
+  $('#ic-bolt').innerHTML = art.bolt();
+  $('#ic-fist').innerHTML = art.fist();
+  $('#ic-claw').innerHTML = art.claw();
+  $('#ic-magic').innerHTML = art.magic();
+  $('#ic-ranged').innerHTML = art.ranged();
+  $('#ic-red').innerHTML = art.sphere('red');
+  $('#ic-green').innerHTML = art.sphere('green');
+  $('#ic-purple').innerHTML = art.sphere('purple');
+  $('#lg-magic').textContent = look.magic.name;
+  $('#lg-ranged').textContent = look.ranged.name;
+  ['red', 'green', 'purple'].forEach(c => { $('#lg-' + c).textContent = sphereName(c); });
+}
+function setLook(k) {
+  look = LOOKS[k] || LOOKS.osrs;
+  try { localStorage.setItem('olm-look', k); } catch (e) {}
+  renderLegend();
+  if (qz && qz.cur) nextQuestion();
+}
+
+/* ---------------- tabs ---------------- */
+const TABS = ['sim', 'learn', 'quiz'];
+let currentTab = 'sim';
+function showTab(t) {
+  if (!TABS.includes(t)) t = 'sim';
+  currentTab = t;
+  TABS.forEach(x => {
+    $('#' + x).hidden = x !== t;
+    $('#tab-' + x).setAttribute('aria-selected', String(x === t));
+  });
+  try { history.replaceState(null, '', '#' + t); } catch (e) {}
+  if (t !== 'sim' && S && S.running && !S.paused) togglePause(true);
+}
+$$('nav.tabs button').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+
+/* ---------------- quiz ---------------- */
+const P_OPTS = [{ id: 'magic', label: 'Protect from Magic' }, { id: 'missiles', label: 'Protect from Missiles' }, { id: 'melee', label: 'Protect from Melee' }];
+const H_OPTS = [{ id: 'mage', label: 'Mage hand (right claw)' }, { id: 'melee', label: 'Melee hand (left claw)' }];
+const QUIZ = [
+  { cat: 'Normal attack', art: () => art.magic(), q: () => `Olm's head throws this (${look.magic.name.toLowerCase()}). Which prayer?`, opts: P_OPTS, a: 'magic', why: () => `${look.magic.name} = magic attack. Protect from Magic.` },
+  { cat: 'Normal attack', art: () => art.ranged(), q: () => `Olm's head throws this (${look.ranged.name.toLowerCase()}). Which prayer?`, opts: P_OPTS, a: 'missiles', why: () => `${look.ranged.name} = ranged attack. Protect from Missiles.` },
+  { cat: 'Sphere', art: () => art.sphere('red'), q: () => `${sphereName('red')} just launched at you. Which prayer?`, opts: P_OPTS, a: 'melee', why: () => `${sphereName('red')}: Protect from Melee. Turn it on now that it has launched.` },
+  { cat: 'Sphere', art: () => art.sphere('green'), q: () => `${sphereName('green')} just launched at you. Which prayer?`, opts: P_OPTS, a: 'missiles', why: () => `${sphereName('green')}: Protect from Missiles.${look.toaSpheres ? '' : ' Spheres are bigger, have a ring and move slower than normal attacks.'}` },
+  { cat: 'Sphere', art: () => art.sphere('purple'), q: () => `${sphereName('purple')} just launched at you. Which prayer?`, opts: P_OPTS, a: 'magic', why: () => `${sphereName('purple')}: Protect from Magic.` },
+  { cat: 'Sphere rule', art: () => art.sphere('purple'), q: () => `You already had Protect from Magic on when the ${sphereName('purple').toLowerCase()} launched. What happens?`, opts: [{ id: 'a', label: 'It is blocked' }, { id: 'b', label: 'Prayer turned off, prayer points halved' }, { id: 'c', label: 'Nothing special' }], a: 'b', why: () => 'If the matching prayer is already on at launch, the sphere turns it off and halves your prayer points. Switch after it launches.' },
+  { cat: 'Which claw', art: () => art.bolt(), q: () => 'A claw just flashed this lightning icon. Which claw is it?', opts: H_OPTS, a: 'melee', why: () => 'Special icons (crystal, lightning, swirl) always show on the melee hand.' },
+  { cat: 'Which claw', art: () => art.fist(), q: () => 'You hit a claw for 34 and it curled into a fist. Which claw?', opts: H_OPTS, a: 'melee', why: () => 'Only the melee hand clenches, after one hit of at least 30 (1/20 of its 600 HP).' },
+  { cat: 'Which claw', art: () => art.claw(), q: () => 'Hover text says "Great Olm (Right claw)". Which claw?', opts: H_OPTS, a: 'mage', why: () => 'Right claw = mage hand. Left claw = melee hand.' },
+  { cat: 'Counting', art: () => art.bolt(), q: () => 'Which of these does NOT count as a basic when you count Olm\'s cycle?', opts: [{ id: 'a', label: 'A coloured sphere' }, { id: 'b', label: 'A fire wall' }, { id: 'c', label: 'Lightning' }], a: 'c', why: () => 'Everything fired from the head is a basic. Crystal Burst, Lightning and Swap are the specials.' },
+  { cat: 'Route', art: () => art.claw(), q: () => 'The head just turned to your side on the null. What do you do?', opts: [{ id: 'a', label: 'Step right now' }, { id: 'b', label: 'Go to the middle tile and tank Basic 2' }, { id: 'c', label: 'Stay on the mage tile' }], a: 'b', why: () => 'Tank Basic 2 on the middle tile first. Leaving early makes Olm lose a basic instead of the special.' },
+  { cat: 'Route', art: () => art.bolt(), q: () => 'You just tanked Basic 2 on the middle tile. Now?', opts: [{ id: 'a', label: 'Step one tile right' }, { id: 'b', label: 'Stay and tank the special' }, { id: 'c', label: 'Run to the melee tile' }], a: 'a', why: () => 'One tile right takes you out of the mage-side view, so Olm finds nobody there and loses the special.' },
+  { cat: 'Route', art: () => art.claw(), q: () => 'You are on the right and Olm\'s head just turned toward you. Now?', opts: [{ id: 'a', label: 'Run back left' }, { id: 'b', label: 'Stay right' }], a: 'a', why: () => 'Run back left as soon as the head turns. Basic 1 goes to your melee guy while you get back.' },
+  { cat: 'Melee guy', art: () => art.claw(), q: () => 'In a duo, which claw should your melee guy hit while the skip is running?', opts: [{ id: 'a', label: 'The melee hand' }, { id: 'b', label: 'The mage hand, from range' }], a: 'b', why: () => 'The head turns toward the most-damaged claw on the null. Both of you hitting the mage hand keeps it on your side.' },
+];
+let qz = { ok: 0, n: 0, streak: 0, cur: null, answered: false, bag: [] };
+function nextQuestion() {
+  if (!qz.bag.length) qz.bag = QUIZ.map((_, i) => i).sort(() => Math.random() - .5);
+  const q = QUIZ[qz.bag.pop()];
+  qz.cur = q; qz.answered = false;
+  $('#qz-cat').textContent = q.cat;
+  $('#qz-art').innerHTML = svg(q.art());
+  $('#qz-q').textContent = q.q();
+  $('#qz-why').textContent = '';
+  const box = $('#qz-opts'); box.innerHTML = '';
+  q.opts.forEach(o => {
+    const b = document.createElement('button');
+    b.className = 'btn'; b.textContent = o.label; b.dataset.id = o.id;
+    b.addEventListener('click', () => answer(o.id, b));
+    box.appendChild(b);
+  });
+}
+function answer(id, btn) {
+  if (qz.answered) return;
+  qz.answered = true; qz.n++;
+  const right = id === qz.cur.a;
+  if (right) { qz.ok++; qz.streak++; } else qz.streak = 0;
+  $$('#qz-opts .btn').forEach(b => { if (b.dataset.id === qz.cur.a) b.classList.add('right'); });
+  if (!right) btn.classList.add('wrong');
+  $('#qz-why').textContent = (right ? 'Correct. ' : 'Not quite. ') + qz.cur.why();
+  $('#qz-score').textContent = `${qz.ok} / ${qz.n} · streak ${qz.streak}`;
+}
+$('#qz-next').addEventListener('click', nextQuestion);
+
+/* ================= SIMULATOR ================= */
+const COLS = 15, ROWS = 8, TW = 48, W = COLS * TW, FLOOR_Y = 150, H = FLOOR_Y + ROWS * TW;
+const zoneOf = c => (S && S.mirror ? (c >= 7 ? 2 : 0) : (c <= 7 ? 0 : 2));   // the mage-side view reaches the centre tile under the head
+const ZONE_NAMES = ['MAGE SIDE', 'MIDDLE', 'MELEE SIDE'];
+// Tile layout in the learning orientation: facing Olm, mage claw on the left, melee claw on the right.
+const LAYOUT = {
+  // skipper routes: LEFT (cast) -> MIDDLE (tank basic 2, a fire wall can't trap you) -> RIGHT (out of view for the special)
+  routes: {
+    short: { home: { c: 6, r: 0 }, mid: { c: 7, r: 0 }, right: { c: 8, r: 0 } },   // the 3 tiles at the head (pack head tiles + centre)
+    long:  { home: { c: 1, r: 0 }, mid: { c: 7, r: 0 }, right: { c: 8, r: 0 } },   // start from the mage-hand tile
+  },
+  melee: { c: 13, r: 0 },     // your melee guy's tile
+  thumb: { c: 10, r: 0 },     // melee thumb: everyone meets here for Swap (portals)
+  // the standard 5-tile Olm pack along the wall row (WeDoRaids !coxtiles)
+  marks: [
+    { c: 1, r: 0, label: 'MAGE' }, { c: 6, r: 0 }, { c: 8, r: 0 },
+    { c: 10, r: 0, label: 'THUMB', dark: true }, { c: 13, r: 0, label: 'MELEE' },
+  ],
+};
+const ROT = ['std', 'empty', 'std', 'special'];
+const SPECIALS = [{ id: 'crystal', name: 'Crystal Burst' }, { id: 'lightning', name: 'Lightning' }, { id: 'swap', name: 'Swap' }];
+const SPHERE_PRAY = { red: 'melee', green: 'missiles', purple: 'magic' };
+const STYLE_PRAY = { magic: 'magic', ranged: 'missiles' };
+const autoPray = () => S.mode === 'skip' || S.mode === 'set';
+const HEAD = { x: W / 2, y: 64 };
+const MOUTH = { x: W / 2, y: 128 };
+
+const cv = $('#cv');
+const ctx = cv.getContext('2d');
+function resizeCanvas() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = W * dpr; cv.height = H * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+/* ---- static scene, painted once ---- */
+function seeded(seed) { return () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; }
+const scene = document.createElement('canvas');
+scene.width = W; scene.height = H;
+(function paintScene() {
+  const g = scene.getContext('2d');
+  const R = seeded(1337);
+  // cave wall
+  const wall = g.createLinearGradient(0, 0, 0, FLOOR_Y);
+  wall.addColorStop(0, '#0d1a17'); wall.addColorStop(1, '#1d3a33');
+  g.fillStyle = wall; g.fillRect(0, 0, W, FLOOR_Y);
+  for (let i = 0; i < 70; i++) {
+    g.fillStyle = `rgba(${40 + R() * 30},${80 + R() * 40},${70 + R() * 30},${.15 + R() * .25})`;
+    g.beginPath(); g.ellipse(R() * W, R() * FLOOR_Y, 20 + R() * 60, 10 + R() * 30, R() * 3, 0, 7); g.fill();
+  }
+  // lime crystal clusters on the wall
+  for (let k = 0; k < 16; k++) {
+    const cx = R() * W, cy = 12 + R() * 90;
+    for (let j = 0; j < 4; j++) {
+      const x = cx + (R() - .5) * 26, h = 14 + R() * 22, w = 4 + R() * 4, a = (R() - .5) * .9;
+      g.save(); g.translate(x, cy + 14); g.rotate(a);
+      g.fillStyle = '#a6d93a'; g.beginPath(); g.moveTo(-w, 0); g.lineTo(0, -h); g.lineTo(w, 0); g.closePath(); g.fill();
+      g.fillStyle = '#6f9e1f'; g.beginPath(); g.moveTo(0, 0); g.lineTo(0, -h); g.lineTo(w, 0); g.closePath(); g.fill();
+      g.restore();
+    }
+  }
+  // stone ledge where the claws rest
+  g.fillStyle = '#4e5a52'; g.fillRect(0, FLOOR_Y - 22, W, 22);
+  for (let i = 0; i < 260; i++) {
+    g.fillStyle = `rgba(${150 + R() * 60},${160 + R() * 50},${150 + R() * 50},${.25 + R() * .4})`;
+    g.beginPath(); g.arc(R() * W, FLOOR_Y - 22 + R() * 22, 1 + R() * 2.4, 0, 7); g.fill();
+  }
+  // floor
+  g.fillStyle = '#243a2d'; g.fillRect(0, FLOOR_Y, W, H - FLOOR_Y);
+  for (let i = 0; i < 1400; i++) {
+    const d = R();
+    g.fillStyle = d < .5 ? `rgba(10,20,14,${.25 + R() * .35})` : `rgba(70,95,78,${.15 + R() * .25})`;
+    g.beginPath(); g.arc(R() * W, FLOOR_Y + R() * (H - FLOOR_Y), .8 + R() * 2.2, 0, 7); g.fill();
+  }
+  // pale cobble band next to the ledge (like the real room)
+  for (let i = 0; i < 300; i++) {
+    g.fillStyle = `rgba(150,165,155,${.08 + R() * .2})`;
+    g.beginPath(); g.arc(R() * W, FLOOR_Y + R() * 26, 1 + R() * 2.5, 0, 7); g.fill();
+  }
+  // faint tile grid
+  g.strokeStyle = 'rgba(0,0,0,.18)'; g.lineWidth = 1;
+  for (let c = 0; c <= COLS; c++) { g.beginPath(); g.moveTo(c * TW + .5, FLOOR_Y); g.lineTo(c * TW + .5, H); g.stroke(); }
+  for (let r = 0; r <= ROWS; r++) { g.beginPath(); g.moveTo(0, FLOOR_Y + r * TW + .5); g.lineTo(W, FLOOR_Y + r * TW + .5); g.stroke(); }
+})();
+
+let S = null;
+
+function makeState(running) {
+  const mode = $('#mode').value;
+  const mirror = $('#mirror').checked;
+  const mt = t => ({ c: mirror ? COLS - 1 - t.c : t.c, r: t.r });
+  const skipRow = +$('#skipRow').value - 1;
+  const R = LAYOUT.routes[$('#route').value] || LAYOUT.routes.short;
+  const home = mt({ c: R.home.c, r: skipRow }), mid = mt({ c: R.mid.c, r: skipRow }), right = mt({ c: R.right.c, r: skipRow });
+  const mel = mt(LAYOUT.melee), thumb = mt(LAYOUT.thumb);
+  const mageSide = mirror ? 2 : 0;
+  const you = { name: 'You', you: true, c: home.c, r: home.r, pc: home.c, pr: home.r, tc: home.c, tr: home.r, hitUntil: 0, say: null };
+  const mate = { name: 'Melee guy', c: mel.c, r: mel.r, pc: mel.c, pr: mel.r, tc: mel.c, tr: mel.r, home: mel, hitUntil: 0, say: null };
+  const hands = {};
+  hands[mageSide] = { type: 'mage', hp: 600, hits: [], clench: 0 };
+  hands[2 - mageSide] = { type: 'melee', hp: 600, hits: [], clench: 0 };
+  const startFacing = 2 - mageSide;   // Olm starts on the melee side: basic 1 goes to your melee guy
+  return {
+    running, paused: false, over: false, pauseAt: 0,
+    mode, mirror, wheels: $('#wheels').checked,
+    tickMs: 600 / +$('#speed').value, lastTickAt: performance.now(),
+    tick: 0, facing: startFacing, headAngle: (1 - startFacing) * .42,
+    olmActs: 0, seenSpecial: mode !== 'set', setAt: null,
+    stepIdx: mode === 'set' ? rand(0, 3) : 0, specIdx: rand(0, 2), mouthUntil: 0,
+    style: Math.random() < .5 ? 'magic' : 'ranged', catchUp: false,
+    players: [you, mate], you, mate, home, mid, right, thumb, portalUntil: 0,
+    marks: LAYOUT.marks.map(t => ({ ...mt(t), label: t.label, dark: t.dark })),
+    hp: 99, pp: 99, prayer: null, sharks: 10, restores: 6, boundUntil: 0,
+    hands, mageSide, meleeSide: 2 - mageSide,
+    proj: [], events: [], crystals: [], bolts: [], notices: [], splats: [], casts: [], puffs: [],
+    icon: null, swapLink: null,
+    stats: { skipped: 0, taken: 0, lost: 0, onMate: 0, pOk: 0, pBad: 0, sOk: 0, sBad: 0, sapped: 0, dmg: 0, react: [], ticks: 0 },
+    react: null,
+  };
+}
+S = makeState(false);
+
+/* ---- chatbox ---- */
+const chatEl = $('#chat');
+function chat(text, kind = '') {
+  const d = document.createElement('div');
+  if (kind) d.className = kind;
+  d.textContent = text;
+  chatEl.appendChild(d);
+  while (chatEl.children.length > 8) chatEl.removeChild(chatEl.firstChild);
+}
+chat('Welcome to the Olm Skip Trainer.');
+chat('Route: MIDDLE (tank basic 2) -> RIGHT (special skipped) -> LEFT. Press Start.', 'coach');
+
+/* ---- notices & splats ---- */
+function notice(text, kind = 'info', ms = 1700) {
+  const col = kind === 'good' ? '#3ee04f' : kind === 'bad' ? '#ff4a3a' : '#ffff00';
+  S.notices.push({ text, col, until: performance.now() + ms, big: kind !== 'info' });
+  if (S.notices.length > 2) S.notices.shift();
+  chat(text, kind === 'good' ? 'good' : kind === 'bad' ? 'bad' : '');
+}
+function splat(x, y, n, col) { S.splats.push({ x, y, n, col, until: performance.now() + 1000, born: performance.now() }); }
+function hurt(n) {
+  S.you.hitUntil = performance.now() + 3000;
+  if (n <= 0) { splat(px(S.you), py(S.you) - 6, 0, 'blue'); return; }
+  S.hp = Math.max(0, S.hp - n); S.stats.dmg += n;
+  splat(px(S.you), py(S.you) - 6, n, 'red');
+}
+
+/* ---- positions (canvas) ---- */
+let interp = 0;
+const tileX = c => c * TW + TW / 2;
+const tileY = r => FLOOR_Y + r * TW + TW / 2;
+const px = p => tileX(p.pc + (p.c - p.pc) * interp);
+const py = p => tileY(p.pr + (p.r - p.pr) * interp);
+const handPos = side => ({ x: side === 0 ? 2 * TW + 10 : W - 2 * TW - 10, y: 100 });
+
+/* ---- prayers ---- */
+function setPrayer(p) {
+  if (!S.running || S.over) return;
+  if (p && S.pp <= 0) { chat('You need to recharge your Prayer.', 'bad'); return; }
+  S.prayer = (S.prayer === p) ? null : p;
+  if (S.react && S.prayer === S.react.need) { S.stats.react.push(performance.now() - S.react.t); S.react = null; }
+  updateHUD();
+}
+
+/* ---- tick engine ---- */
+function doTick() {
+  S.tick++; S.stats.ticks++;
+  const due = S.events.filter(e => e.t <= S.tick);
+  S.events = S.events.filter(e => e.t > S.tick);
+  for (const p of S.players) {
+    p.pc = p.c; p.pr = p.r;
+    if (p.you && S.tick < S.boundUntil) continue;
+    for (let s = 0; s < 2; s++) {           // run: 2 tiles per tick, diagonals allowed
+      const dc = Math.sign(p.tc - p.c), dr = Math.sign(p.tr - p.r);
+      if (!dc && !dr) break;
+      p.c += dc; p.r += dr;
+    }
+  }
+  due.forEach(e => e.fn());
+  if (S.tick % 4 === 2) mageCast();
+  if (S.tick % 4 === 1) meleeGuyHit();
+  if (S.tick % 4 === 0) olmAct();
+  if (S.prayer && S.tick % 5 === 0) {
+    S.pp = Math.max(0, S.pp - 1);
+    if (S.pp === 0) { S.prayer = null; chat('You have run out of Prayer points, you can recharge at an altar.', 'bad'); }
+  }
+  const mh = S.hands[S.meleeSide];
+  if (mh.clench && S.tick >= mh.clench) mh.clench = 0;
+  if (S.icon && S.tick >= S.icon.until) S.icon = null;
+  S.bolts = S.bolts.filter(b => S.tick < b.until);
+  S.casts = S.casts.filter(k => S.tick - k.t < 2);
+  if (S.swapLink && S.tick >= S.swapLink.until) S.swapLink = null;
+  if (S.hp <= 0) endRun(true);
+  updateHUD();
+}
+
+// You auto-cast on the mage hand every 4 ticks. That damage is what pulls Olm's head to the mage side.
+function mageCast() {
+  const h = S.hands[S.mageSide];
+  S.casts.push({ t: S.tick, from: S.you });
+  if (h.hp <= 0) return;
+  const d = rand(4, 32);
+  h.hits.push({ t: S.tick, d: Math.max(d, 1) });
+  h.hp = Math.max(0, h.hp - d);
+  const hp = handPos(S.mageSide);
+  S.events.push({ t: S.tick + 1, fn: () => splat(hp.x, hp.y - 4, d, 'red') });
+  if (h.hp === 0) resetClaw(h);
+}
+// Duo: your melee guy stays on the melee side on long range and attacks the MAGE hand too (Synq, Qevon),
+// so the mage hand always has the most damage and Olm's head swings to the mage side on the null.
+function meleeGuyHit() {
+  const h = S.hands[S.mageSide];
+  if (h.hp <= 0 || zoneOf(S.mate.c) !== S.meleeSide) return;
+  S.casts.push({ t: S.tick, from: S.mate });
+  const d = rand(4, 28);
+  h.hits.push({ t: S.tick, d: Math.max(d, 1) });
+  h.hp = Math.max(0, h.hp - d);
+  const hp = handPos(S.mageSide);
+  S.events.push({ t: S.tick + 1, fn: () => splat(hp.x + 14, hp.y + 6, d, 'red') });
+  if (h.hp === 0) resetClaw(h);
+}
+function resetClaw(h) {
+  chat(`${h.type === 'mage' ? 'Mage' : 'Melee'} hand down. Reset for practice.`);
+  S.events.push({ t: S.tick + 4, fn: () => { h.hp = 600; h.clench = 0; } });
+}
+
+// On the null Olm scans nobody, so its head turns toward the claw that took the most damage in the last 4 ticks.
+function clawPull() {
+  const dmg = side => S.hands[side].hits.filter(k => S.tick - k.t <= 4).reduce((a, k) => a + k.d, 0);
+  const l = dmg(0), r = dmg(2);
+  if (!l && !r) return null;
+  return l >= r ? 0 : 2;
+}
+
+function olmAct() {
+  let step = ROT[S.stepIdx % 4];
+  if (S.mode === 'prayer' && step === 'special') step = 'empty';
+  S.olmActs++;
+  [0, 2].forEach(side => { S.hands[side].hits = S.hands[side].hits.filter(k => S.tick - k.t <= 8); });
+  const counts = [0, 0, 0];
+  S.players.forEach(p => counts[zoneOf(p.c)]++);
+  const other = 2 - S.facing;
+
+  if (step === 'empty') {
+    // the null: no attack, the head swings toward the most-damaged claw
+    const pull = S.mode === 'prayer' ? S.mageSide : clawPull();
+    if (pull !== null && pull !== S.facing) {
+      S.facing = pull;
+      if (pull === S.mageSide && S.mode !== 'prayer') chat('Olm turns its head to the mage side.', 'olm');
+    }
+    if (S.catchUp && counts[S.facing] > 0) { standardAttack(true); S.catchUp = false; }
+  } else if (counts[S.facing] === 0) {
+    // nobody where Olm is looking: it turns to the other side and loses this action
+    if (counts[other] > 0) S.facing = other;
+    if (step === 'std') { S.catchUp = true; notice('Too early: Olm lost a BASIC, not the special', 'bad'); }
+    else {
+      const sp = SPECIALS[S.specIdx % 3]; S.specIdx++;
+      S.stats.skipped++;
+      S.you.say = { text: 'Skipped!', until: performance.now() + 1500 };
+      if (S.mode === 'set' && S.setAt === null) {
+        S.setAt = S.stats.ticks;
+        notice(`Skip SET in ${(S.setAt * .6).toFixed(1)} s!`, 'good', 2600);
+      } else notice(`${sp.name} SKIPPED`, 'good', 2000);
+    }
+  } else {
+    if (S.catchUp) { standardAttack(true); S.catchUp = false; }
+    if (step === 'std') standardAttack(false);
+    else doSpecial(SPECIALS[S.specIdx++ % 3]);
+  }
+  S.stepIdx++;
+}
+
+function targetsInView() { return S.players.filter(p => zoneOf(p.c) === S.facing); }
+
+function standardAttack(isCatchUp) {
+  const targets = targetsInView();
+  if (!targets.length) return;
+  S.mouthUntil = performance.now() + 450;
+  const sphereChance = S.mode === 'prayer' ? .25 : S.mode === 'full' ? .15 : 0;
+  if (!isCatchUp && Math.random() < sphereChance) {
+    const t = targets.includes(S.you) && Math.random() < .75 ? S.you : pick(targets);
+    launchSphere(pick(['red', 'green', 'purple']), t);
+    return;
+  }
+  const style = S.style;
+  targets.forEach(t => launch({ kind: style, target: t, travel: 2 }));
+  if (Math.random() < .2) S.style = style === 'magic' ? 'ranged' : 'magic';
+}
+
+function launch(pr) {
+  pr.from = S.tick; pr.land = S.tick + pr.travel; pr.spin = Math.random() * 6;
+  S.proj.push(pr);
+  if (pr.target.you && !autoPray()) {
+    const need = pr.kind === 'sphere' ? SPHERE_PRAY[pr.color] : STYLE_PRAY[pr.kind];
+    if (S.prayer !== need) S.react = { need, t: performance.now() };
+  }
+  S.events.push({ t: pr.land, fn: () => landProj(pr) });
+}
+
+function launchSphere(color, target) {
+  if (target.you) chat(`The Great Olm fires a ${color} prayer orb your way (${sphereName(color).toLowerCase()}).`, 'olm');
+  if (target.you && !autoPray() && S.prayer === SPHERE_PRAY[color]) {
+    S.prayer = null; S.pp = Math.floor(S.pp / 2); S.stats.sapped++;
+    notice('Sapped! Switch AFTER the sphere launches', 'bad', 2400);
+  }
+  launch({ kind: 'sphere', color, target, travel: 3 });
+}
+
+function landProj(pr) {
+  S.proj = S.proj.filter(p => p !== pr);
+  S.puffs.push({ x: px(pr.target), y: py(pr.target) - 8, col: pr.kind === 'sphere' ? sphereCol(pr.color) : look[pr.kind].core, born: performance.now() });
+  if (!pr.target.you) return;
+  if (pr.kind === 'sphere') {
+    const need = SPHERE_PRAY[pr.color];
+    if (autoPray() || S.prayer === need) { S.stats.sOk++; hurt(0); }
+    else { S.stats.sBad++; hurt(Math.max(1, Math.floor(S.hp / 2))); notice(`${sphereName(pr.color)} needs ${PRAY_LABEL[need]}`, 'bad'); }
+  } else {
+    const need = STYLE_PRAY[pr.kind];
+    if (autoPray() || S.prayer === need) { S.stats.pOk++; hurt(rand(0, 7)); }
+    else { S.stats.pBad++; hurt(rand(10, 33)); notice(`${look[pr.kind].name} = ${PRAY_LABEL[need]}`, 'bad', 1200); }
+  }
+  if (S.react && S.react.need === (pr.kind === 'sphere' ? SPHERE_PRAY[pr.color] : STYLE_PRAY[pr.kind])) S.react = null;
+}
+
+function doSpecial(sp) {
+  S.icon = { id: sp.id, until: S.tick + 3 };
+  S.seenSpecial = true;
+  if (zoneOf(S.you.c) !== S.facing) {
+    S.stats.onMate++;
+    notice(`${sp.name} on your melee guy. Count from here!`, 'info', 2400);
+  } else {
+    S.stats.taken++;
+    notice(`${sp.name} hit you. ${S.mode === 'set' && !S.stats.skipped ? 'Count from here!' : 'Move earlier!'}`, 'bad', 2200);
+  }
+  if (sp.id === 'crystal') {
+    S.players.forEach(p => {
+      const c = { c: p.c, r: p.r, burst: S.tick + 4, born: S.tick };
+      S.crystals.push(c);
+      S.events.push({ t: c.burst, fn: () => {
+        S.crystals = S.crystals.filter(k => k !== c);
+        S.puffs.push({ x: tileX(c.c), y: tileY(c.r), col: '#7fe3d4', born: performance.now(), big: true });
+        if (S.you.c === c.c && S.you.r === c.r) { hurt(rand(28, 40)); notice('Step off the crystal!', 'bad'); }
+      } });
+    });
+  } else if (sp.id === 'lightning') {
+    const cols = new Set();
+    if (Math.random() < .6) cols.add(S.you.c);
+    while (cols.size < 4) cols.add(rand(0, COLS - 1));
+    const b = { cols: [...cols], strike: S.tick + 2, until: S.tick + 3 };
+    S.bolts.push(b);
+    S.events.push({ t: b.strike, fn: () => {
+      if (b.cols.includes(S.you.c)) {
+        hurt(rand(15, 25)); S.prayer = null; S.boundUntil = S.tick + 3;
+        notice('Zapped: prayer off, put it back on!', 'bad', 2200);
+      }
+    } });
+  } else if (sp.id === 'swap') {
+    const m = S.mate;
+    S.swapLink = { a: S.you, b: m, until: S.tick + 3 };
+    S.portalUntil = S.tick + 3;
+    m.tc = S.thumb.c; m.tr = S.thumb.r;
+    S.events.push({ t: S.tick + 3, fn: () => {
+      const d = Math.max(Math.abs(S.you.c - m.c), Math.abs(S.you.r - m.r));
+      const yc = S.you.c, yr = S.you.r;
+      Object.assign(S.you, { c: m.c, r: m.r, pc: m.c, pr: m.r, tc: m.c, tr: m.r });
+      Object.assign(m, { c: yc, r: yr, pc: yc, pr: yr, tc: m.home.c, tr: m.home.r });
+      hurt(Math.min(40, d * 3));
+      notice(d <= 1 ? 'Swapped on the thumb: almost no damage' : `Swapped ${d} tiles apart: meet at the THUMB`, d <= 1 ? 'good' : 'bad');
+    } });
+  }
+}
+
+/* ---- player actions ---- */
+function walkTo(c, r) {
+  if (!S.running || S.over || S.paused) return;
+  S.you.tc = Math.max(0, Math.min(COLS - 1, c));
+  S.you.tr = Math.max(0, Math.min(ROWS - 1, r));
+  S.clickMark = { c: S.you.tc, r: S.you.tr, born: performance.now() };
+}
+function eat() {
+  if (!S.running || S.over || !S.sharks || S.hp >= 99) return;
+  S.sharks--; S.hp = Math.min(99, S.hp + 20); chat('You eat the shark. It heals some health.'); updateHUD();
+}
+function restore() {
+  if (!S.running || S.over || !S.restores || S.pp >= 99) return;
+  S.restores--; S.pp = Math.min(99, S.pp + 32); chat('You drink some of your super restore potion.'); updateHUD();
+}
+
+/* ---- run control ---- */
+function startRun() {
+  S = makeState(true);
+  $('#ov').hidden = true;
+  $('#pauseBtn').textContent = 'Pause';
+  chatEl.innerHTML = '';
+  chat(S.mode === 'set' ? 'Watch the head. Wait for a special, then count.' : S.mode === 'prayer' ? 'Pray against every attack. Spheres: switch after launch.' : 'You are on the mage hand. Your melee guy has the melee hand.', 'coach');
+  updateHUD();
+}
+function togglePause(force) {
+  if (!S.running || S.over) return;
+  const now = performance.now();
+  const to = force === true ? true : !S.paused;
+  if (to === S.paused) return;
+  S.paused = to;
+  if (to) S.pauseAt = now; else S.lastTickAt += now - S.pauseAt;
+  $('#pauseBtn').textContent = S.paused ? 'Resume' : 'Pause';
+}
+function summaryHTML(died) {
+  const st = S.stats;
+  const pt = st.pOk + st.pBad;
+  const avg = st.react.length ? Math.round(st.react.reduce((a, b) => a + b, 0) / st.react.length) + ' ms' : '—';
+  const rows = [];
+  if (S.mode === 'set') rows.push(['Time to set the skip', S.setAt === null ? 'not set' : (S.setAt * .6).toFixed(1) + ' s']);
+  if (S.mode !== 'prayer') rows.push(['Specials skipped', `${st.skipped} / ${st.skipped + st.taken}`]);
+  if (!autoPray()) {
+    rows.push(['Correct prayers', pt ? `${st.pOk} / ${pt} (${Math.round(st.pOk / pt * 100)}%)` : '—']);
+    rows.push(['Spheres blocked', `${st.sOk} / ${st.sOk + st.sBad}`]);
+    rows.push(['Prayer sapped', st.sapped]);
+    rows.push(['Avg prayer switch', avg]);
+  }
+  rows.push(['Damage taken', st.dmg]);
+  rows.push(['Time', (st.ticks * 0.6).toFixed(1) + ' s']);
+  let tip = '';
+  if (S.mode !== 'prayer' && st.taken > st.skipped) tip = 'Tip: tank basic 2 on the MIDDLE tile, then step RIGHT. Run back LEFT when the head turns.';
+  else if (!autoPray() && st.sapped) tip = 'Tip: let the sphere launch first, then switch.';
+  else if (!autoPray() && pt && st.pBad / pt > .2) tip = `Tip: ${look.magic.name} = MAGE, ${look.ranged.name.toLowerCase()} = RANGE.`;
+  return `<h3>${died ? 'Oh dear, you are dead!' : 'Run summary'}</h3>
+    <div class="sumgrid">${rows.map(r => `<span>${r[0]}</span><span>${r[1]}</span>`).join('')}</div>
+    ${tip ? `<p class="muted">${tip}</p>` : ''}
+    <button class="btn primary" id="ovAgain">Go again</button>`;
+}
+function endRun(died) {
+  if (!S.running || S.over) return;
+  S.over = true;
+  if (died) chat('Oh dear, you are dead!', 'bad');
+  $('#ovbox').innerHTML = summaryHTML(died);
+  $('#ov').hidden = false;
+  $('#ovAgain').addEventListener('click', startRun);
+}
+
+/* ---- coaching (training wheels) ---- */
+function coach() {
+  if (!S.running || S.over || !S.wheels || S.mode === 'prayer') return null;
+  if (S.tick < S.portalUntil) return { text: 'SWAP! Meet at the THUMB tile', target: S.thumb, hot: true };
+  const next = S.stepIdx % 4;
+  const at = t => S.you.c === t.c && S.you.r === t.r;
+  const headOnYou = S.facing === S.mageSide;
+  if (S.mode === 'set' && !S.seenSpecial) {
+    return at(S.home) ? { text: 'Stay LEFT and watch for a special icon', target: null } : { text: 'Go LEFT and watch for a special', target: S.home };
+  }
+  if (next === 3) return at(S.right) ? { text: 'On the RIGHT. Special due: watch it skip', target: null }
+                                     : { text: 'Tanked basic 2: step RIGHT now!', target: S.right, hot: true };
+  if (next === 2) {
+    if (!headOnYou) return { text: 'Wait LEFT for the head to turn to you', target: S.home };
+    return at(S.mid) ? { text: 'Tank basic 2 here on the MIDDLE tile', target: null }
+                     : { text: 'Head is on you: go to the MIDDLE tile', target: S.mid, hot: true };
+  }
+  if (!at(S.home)) return { text: 'Head turned: run back LEFT', target: S.home, hot: true };
+  return { text: next === 0 ? 'Basic 1 goes to your melee guy' : 'Null next: head swings back to the mage hand side', target: null };
+}
+
+/* ---- HUD ---- */
+function updateHUD() {
+  $('#hpTxt').textContent = S.hp; $('#hpFill').style.height = S.hp / 99 * 100 + '%';
+  $('#ppTxt').textContent = S.pp; $('#ppFill').style.height = S.pp / 99 * 100 + '%';
+  const col = v => v > 66 ? 'var(--good)' : v > 33 ? 'var(--yellow)' : 'var(--bad)';
+  $('#hpTxt').style.color = col(S.hp); $('#ppTxt').style.color = col(S.pp);
+  $('#eatBtn').textContent = `Shark ×${S.sharks} (F)`;
+  $('#restoreBtn').textContent = `Restore ×${S.restores} (R)`;
+  $$('.pray-btn').forEach(b => b.classList.toggle('on', S.prayer === b.dataset.p));
+  const st = S.stats; const pt = st.pOk + st.pBad;
+  const rows = [];
+  if (S.mode !== 'prayer') rows.push(['Specials skipped', st.skipped], ['Specials taken', st.taken]);
+  if (!autoPray()) rows.push(['Prayer accuracy', pt ? Math.round(st.pOk / pt * 100) + '%' : '—'], ['Spheres blocked', `${st.sOk}/${st.sOk + st.sBad}`]);
+  rows.push(['Damage taken', st.dmg]);
+  $('#stats').innerHTML = rows.map(r => `<span>${r[0]}</span><b>${r[1]}</b>`).join('');
+}
+
+/* ---- drawing helpers ---- */
+function osrsText(g, text, x, y, col, size = 20, align = 'center') {
+  g.font = `${size}px VT323, monospace`; g.textAlign = align;
+  g.fillStyle = '#000'; g.fillText(text, x + 1, y + 1);
+  g.fillStyle = col; g.fillText(text, x, y);
+}
+function drawHitsplat(g, s, now) {
+  const age = (now - s.born) / 1000;
+  const y = s.y - age * 6;
+  g.save(); g.translate(s.x, y);
+  g.fillStyle = s.col === 'blue' ? '#2b5fd9' : '#b3150b';
+  g.strokeStyle = '#000'; g.lineWidth = 1.5;
+  g.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = i / 10 * Math.PI * 2, r = i % 2 ? 9 : 13;
+    g.lineTo(Math.cos(a) * r, Math.sin(a) * r * .85);
+  }
+  g.closePath(); g.fill(); g.stroke();
+  g.restore();
+  osrsText(g, String(s.n), s.x, y + 6, '#fff', 19);
+}
+function drawOverhead(g, prayer, x, y) {
+  g.save(); g.translate(x, y);
+  if (prayer === 'magic') {
+    g.fillStyle = '#2a63c9'; g.beginPath(); g.arc(0, 0, 10, 0, 7); g.fill();
+    g.strokeStyle = '#9fd0ff'; g.lineWidth = 2; g.stroke();
+    g.fillStyle = '#e8f4ff'; g.beginPath(); g.moveTo(0, -8); g.lineTo(2.5, -2.5); g.lineTo(8, 0); g.lineTo(2.5, 2.5); g.lineTo(0, 8); g.lineTo(-2.5, 2.5); g.lineTo(-8, 0); g.lineTo(-2.5, -2.5); g.closePath(); g.fill();
+  } else if (prayer === 'missiles') {
+    g.strokeStyle = '#6b4a22'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(-9, 9); g.lineTo(7, -7); g.stroke();
+    g.fillStyle = '#d6dde0'; g.beginPath(); g.moveTo(6, -11); g.lineTo(11, -11); g.lineTo(11, -6); g.closePath(); g.fill();
+    g.strokeStyle = '#3fae46'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(-9, 9); g.lineTo(-10, 4); g.moveTo(-9, 9); g.lineTo(-4, 10); g.stroke();
+  } else {
+    g.strokeStyle = '#d9dde0'; g.lineWidth = 4; g.lineCap = 'round'; g.beginPath(); g.moveTo(-8, 8); g.lineTo(8, -8); g.stroke();
+    g.strokeStyle = '#8a5a20'; g.lineWidth = 3; g.beginPath(); g.moveTo(-10, 4); g.lineTo(-4, 10); g.stroke();
+  }
+  g.restore();
+}
+
+/* ---- main draw ---- */
+function draw(now) {
+  const g = ctx;
+  g.drawImage(scene, 0, 0);
+
+  // Olm's view: the zone it is facing
+  S.headAngle += ((1 - S.facing) * .42 - S.headAngle) * .16;
+  const edge = S.mirror ? 7 : 8;   // first column of the right-hand view
+  const z0 = S.facing === 0 ? 0 : edge * TW, zw = S.facing === 0 ? edge * TW : W - edge * TW;
+  g.fillStyle = 'rgba(255,214,64,.10)'; g.fillRect(z0, FLOOR_Y, zw, H - FLOOR_Y);
+  g.strokeStyle = 'rgba(255,214,64,.5)'; g.lineWidth = 2; g.setLineDash([8, 6]);
+  g.strokeRect(z0 + 1, FLOOR_Y + 1, zw - 2, H - FLOOR_Y - 2); g.setLineDash([]);
+  g.strokeStyle = 'rgba(241,230,200,.18)'; g.lineWidth = 1;
+  g.beginPath(); g.moveTo(edge * TW, FLOOR_Y); g.lineTo(edge * TW, H); g.stroke();
+  const zn = S.mirror ? [...ZONE_NAMES].reverse() : ZONE_NAMES;
+  [[0, edge / 2], [2, (edge + COLS) / 2]].forEach(([i, cx]) => osrsText(g, i === S.facing ? `OLM SEES: ${zn[i]}` : zn[i], cx * TW, H - 10, i === S.facing ? '#ffff00' : 'rgba(241,230,200,.45)', 20));
+
+  // ground markers (tile pack): thin outline like RuneLite
+  S.marks.forEach(m => {
+    g.strokeStyle = m.dark ? '#5a5a5a' : '#ffff00'; g.lineWidth = 2;
+    g.strokeRect(m.c * TW + 2, FLOOR_Y + m.r * TW + 2, TW - 4, TW - 4);
+    if (m.label && S.wheels) osrsText(g, m.label, tileX(m.c), FLOOR_Y + m.r * TW + TW - 5, m.dark ? '#cfcfcf' : '#ffff00', 15);
+  });
+  // the skipper's route (coach markers on top of the pack)
+  if (S.wheels && S.mode !== 'prayer') {
+    [[S.home, 'L'], [S.mid, 'MID'], [S.right, 'R']].forEach(([t, lab]) => {
+      g.strokeStyle = '#3ee04f'; g.lineWidth = 2; g.setLineDash([5, 4]);
+      g.strokeRect(t.c * TW + 7, FLOOR_Y + t.r * TW + 7, TW - 14, TW - 14); g.setLineDash([]);
+      osrsText(g, lab, tileX(t.c), FLOOR_Y + t.r * TW + 17, '#3ee04f', 15);
+    });
+  }
+
+  // coaching target
+  const co = coach();
+  if (co && co.target) {
+    const pulse = .25 + .2 * Math.sin(now / 120);
+    g.fillStyle = `rgba(62,224,79,${pulse})`;
+    g.fillRect(co.target.c * TW + 3, FLOOR_Y + co.target.r * TW + 3, TW - 6, TW - 6);
+  }
+  // click marker (yellow X like OSRS)
+  if (S.clickMark && now - S.clickMark.born < 500) {
+    const x = tileX(S.clickMark.c), y = tileY(S.clickMark.r), k = 6 + (now - S.clickMark.born) / 80;
+    g.strokeStyle = '#ffff00'; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(x - k, y - k); g.lineTo(x + k, y + k); g.moveTo(x + k, y - k); g.lineTo(x - k, y + k); g.stroke();
+  }
+
+  // lightning
+  S.bolts.forEach(b => {
+    const striking = S.tick >= b.strike;
+    b.cols.forEach(c => {
+      const x0 = tileX(c);
+      if (!striking) {
+        g.fillStyle = 'rgba(255,240,140,.12)'; g.fillRect(c * TW, FLOOR_Y, TW, H - FLOOR_Y);
+        return;
+      }
+      g.strokeStyle = 'rgba(255,248,180,.35)'; g.lineWidth = 10;
+      g.beginPath(); let x = x0; g.moveTo(x, FLOOR_Y);
+      for (let y = FLOOR_Y; y <= H; y += 18) { x = x0 + (Math.random() - .5) * 18; g.lineTo(x, y); }
+      g.stroke();
+      g.strokeStyle = '#fffbe0'; g.lineWidth = 2.5; g.stroke();
+    });
+  });
+  // crystal burst: crystals grow out of the floor
+  S.crystals.forEach(k => {
+    const x = tileX(k.c), y = tileY(k.r);
+    const grow = Math.min(1, (S.tick - k.born + interp) / 3);
+    g.fillStyle = 'rgba(127,227,212,.22)'; g.fillRect(k.c * TW + 2, FLOOR_Y + k.r * TW + 2, TW - 4, TW - 4);
+    [[-8, 6, 16], [0, 0, 24], [8, 6, 14]].forEach(([dx, dy, h]) => {
+      const hh = h * (0.3 + grow * .7);
+      g.fillStyle = '#9ff0e2'; g.beginPath(); g.moveTo(x + dx - 5, y + dy + 8); g.lineTo(x + dx, y + dy + 8 - hh); g.lineTo(x + dx + 5, y + dy + 8); g.closePath(); g.fill();
+      g.fillStyle = '#4fb8a8'; g.beginPath(); g.moveTo(x + dx, y + dy + 8); g.lineTo(x + dx, y + dy + 8 - hh); g.lineTo(x + dx + 5, y + dy + 8); g.closePath(); g.fill();
+    });
+  });
+
+  drawHand(g, 0); drawHand(g, 2);
+  drawHead(g, now);
+
+  // your spell on the mage hand
+  S.casts.forEach(k => {
+    const t = Math.min(1, (S.tick - k.t + interp) / 1.1);
+    const hp = handPos(S.mageSide);
+    const f = k.from || S.you;
+    const x = px(f) + (hp.x - px(f)) * t, y = py(f) - 10 + (hp.y - py(f) + 10) * t;
+    g.fillStyle = f.you ? 'rgba(255,120,40,.35)' : 'rgba(120,170,255,.35)'; g.beginPath(); g.arc(x, y, 9, 0, 7); g.fill();
+    g.fillStyle = f.you ? '#ffd27a' : '#cfe0ff'; g.beginPath(); g.arc(x, y, 4, 0, 7); g.fill();
+  });
+
+  // swap portals
+  if (S.swapLink) {
+    [S.swapLink.a, S.swapLink.b].forEach(p => {
+      g.strokeStyle = '#c58cff'; g.lineWidth = 3;
+      for (let i = 0; i < 2; i++) { g.beginPath(); g.arc(px(p), py(p) + 8, 14 + i * 5, now / 200 + i, now / 200 + i + 4); g.stroke(); }
+    });
+  }
+
+  S.players.forEach(p => drawPlayer(g, p, now));
+
+  // Olm's projectiles
+  S.proj.forEach(pr => drawProjectile(g, pr, now));
+
+  // impact puffs
+  S.puffs = S.puffs.filter(p => now - p.born < 400);
+  S.puffs.forEach(p => {
+    const a = (now - p.born) / 400;
+    g.globalAlpha = 1 - a; g.strokeStyle = p.col; g.lineWidth = 3;
+    g.beginPath(); g.arc(p.x, p.y, (p.big ? 10 : 6) + a * (p.big ? 26 : 16), 0, 7); g.stroke();
+    g.globalAlpha = 1;
+  });
+
+  // hitsplats
+  S.splats = S.splats.filter(s => s.until > now);
+  S.splats.forEach(s => drawHitsplat(g, s, now));
+
+  // RuneLite-style overlay (training wheels)
+  if (S.running && S.wheels && S.mode !== 'set') drawOverlay(g);
+
+  // coach line (yellow overhead-style text)
+  if (co) {
+    const size = co.hot ? 34 : 24;
+    const col = co.hot ? (Math.sin(now / 90) > 0 ? '#3ee04f' : '#ffff00') : '#ffff00';
+    osrsText(g, co.text, W / 2, FLOOR_Y + 175, col, size);
+  }
+  // notices
+  S.notices = S.notices.filter(n => n.until > now);
+  S.notices.forEach((n, i) => osrsText(g, n.text, W / 2, FLOOR_Y + 240 + i * 32, n.col, n.big ? 28 : 22));
+
+  if (S.paused && !S.over) {
+    g.fillStyle = 'rgba(8,6,4,.55)'; g.fillRect(0, 0, W, H);
+    osrsText(g, 'PAUSED · press P', W / 2, H / 2, '#ff981f', 42);
+  }
+}
+
+function drawOverlay(g) {
+  const x = 8, y = 8, w = 182, h = 74;
+  g.fillStyle = 'rgba(30,27,23,.82)'; g.fillRect(x, y, w, h);
+  g.strokeStyle = 'rgba(90,80,64,.9)'; g.lineWidth = 1; g.strokeRect(x + .5, y + .5, w - 1, h - 1);
+  const next = S.stepIdx % 4;
+  const names = ['Basic 1', 'Null (head turns)', 'Basic 2', S.mode === 'prayer' ? 'Null' : 'SPECIAL'];
+  const until = 4 - (S.tick % 4);
+  osrsText(g, 'Olm', x + 8, y + 18, '#ff981f', 19, 'left');
+  osrsText(g, `Next: ${names[next]}`, x + 8, y + 38, next === 3 && S.mode !== 'prayer' ? '#ff4a3a' : '#ffffff', 19, 'left');
+  osrsText(g, `In: ${until} tick${until > 1 ? 's' : ''}`, x + 8, y + 57, '#ffffff', 19, 'left');
+  if (S.mode !== 'prayer') osrsText(g, SPECIALS[S.specIdx % 3].name, x + w - 8, y + 18, '#c9c9c9', 16, 'right');
+  for (let i = 0; i < 4; i++) {
+    const on = i === (S.tick + 3) % 4;
+    g.fillStyle = on ? '#ffff00' : '#3a352e';
+    g.beginPath(); g.arc(x + w - 52 + i * 13, y + 52, 5, 0, 7); g.fill();
+    if (i === 3) { g.strokeStyle = '#7fe3d4'; g.lineWidth = 1.5; g.stroke(); }
+  }
+}
+
+function drawProjectile(g, pr, now) {
+  const t = Math.min(1, (S.tick - pr.from + interp) / (pr.land - pr.from));
+  const tx = px(pr.target), ty = py(pr.target) - 10;
+  const pos = u => ({ x: MOUTH.x + (tx - MOUTH.x) * u, y: MOUTH.y + (ty - MOUTH.y) * u - Math.sin(u * Math.PI) * 30 });
+  const p = pos(t);
+  const L = pr.kind === 'sphere' ? null : look[pr.kind];
+  const trailCol = pr.kind === 'sphere' ? sphereCol(pr.color) : L.core;
+  // trail
+  for (let i = 1; i <= 6; i++) {
+    const q = pos(Math.max(0, t - i * .035));
+    g.globalAlpha = .28 - i * .04; g.fillStyle = trailCol;
+    g.beginPath(); g.arc(q.x, q.y, (pr.kind === 'sphere' ? 13 : 8) - i, 0, 7); g.fill();
+  }
+  g.globalAlpha = 1;
+  if (pr.kind === 'sphere' && look.toaSpheres) {
+    const q = pos(Math.max(0, t - .03));
+    drawToa(g, pr.color, p.x, p.y, Math.atan2(p.y - q.y, p.x - q.x), now);
+  } else if (pr.kind === 'sphere') {
+    const c = SPHERE_COL[pr.color];
+    const pulse = 1 + .08 * Math.sin(now / 70);
+    g.globalAlpha = .3; g.fillStyle = c; g.beginPath(); g.arc(p.x, p.y, 22 * pulse, 0, 7); g.fill();
+    g.globalAlpha = .55; g.beginPath(); g.arc(p.x, p.y, 15, 0, 7); g.fill();
+    g.globalAlpha = 1; g.strokeStyle = c; g.lineWidth = 4; g.beginPath(); g.arc(p.x, p.y, 15, 0, 7); g.stroke();
+    g.strokeStyle = '#fff'; g.lineWidth = 2; g.beginPath(); g.arc(p.x, p.y, 7, now / 110, now / 110 + 4.2); g.stroke();
+  } else if (L.shape === 'orb') {
+    g.fillStyle = L.core; g.globalAlpha = .3; g.beginPath(); g.arc(p.x, p.y, 16, 0, 7); g.fill(); g.globalAlpha = 1;
+    const rg = g.createRadialGradient(p.x - 3, p.y - 3, 1, p.x, p.y, 10);
+    rg.addColorStop(0, L.hi); rg.addColorStop(.5, L.core); rg.addColorStop(1, L.lo);
+    g.fillStyle = rg; g.beginPath(); g.arc(p.x, p.y, 10, 0, 7); g.fill();
+    // flicker
+    g.strokeStyle = L.hi; g.globalAlpha = .6; g.lineWidth = 1.5;
+    g.beginPath(); g.arc(p.x, p.y, 12 + Math.sin(now / 50) * 1.5, now / 90, now / 90 + 2); g.stroke(); g.globalAlpha = 1;
+  } else {
+    g.save(); g.translate(p.x, p.y); g.rotate(pr.spin + t * 9);
+    g.fillStyle = L.core; g.strokeStyle = L.lo; g.lineWidth = 1.5;
+    g.beginPath(); g.moveTo(0, -11); g.lineTo(6, -1); g.lineTo(1, 12); g.lineTo(-6, 0); g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = L.lo; g.globalAlpha = .5; g.beginPath(); g.moveTo(0, -11); g.lineTo(1, 12); g.lineTo(-6, 0); g.closePath(); g.fill(); g.globalAlpha = 1;
+    g.restore();
+    g.fillStyle = '#ffffff'; g.globalAlpha = .7 + .3 * Math.sin(now / 40);
+    g.fillRect(p.x + 7, p.y - 9, 2, 2); g.globalAlpha = 1;
+  }
+  // training wheels: name the prayer this needs
+  if (S.wheels && pr.target.you && !autoPray()) {
+    const need = pr.kind === 'sphere' ? SPHERE_PRAY[pr.color] : STYLE_PRAY[pr.kind];
+    drawOverhead(g, need, p.x + 24, p.y - 4);
+  }
+}
+
+// Tombs of Amascut style projectiles (what "Replace Olm Orbs" shows)
+function drawToa(g, color, x, y, ang, now) {
+  const glow = (c, r) => { g.globalAlpha = .28; g.fillStyle = c; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); g.globalAlpha = 1; };
+  if (color === 'red') {
+    glow('#ff3b30', 20);
+    g.save(); g.translate(x, y); g.rotate(now / 55);
+    g.fillStyle = '#ff6a5c'; g.strokeStyle = '#ffd0c8'; g.lineWidth = 1.5;
+    g.beginPath(); g.moveTo(-14, 4); g.quadraticCurveTo(0, -16, 16, -8); g.quadraticCurveTo(4, -6, -10, 9); g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = '#7a1a12'; g.fillRect(-17, 4, 8, 4);
+    g.restore();
+  } else if (color === 'green') {
+    glow('#ffffff', 16);
+    g.save(); g.translate(x, y); g.rotate(ang);
+    g.shadowColor = '#ffffff'; g.shadowBlur = 10;
+    g.strokeStyle = '#ffffff'; g.lineWidth = 3; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(-16, 0); g.lineTo(12, 0); g.stroke();
+    g.fillStyle = '#ffffff'; g.beginPath(); g.moveTo(18, 0); g.lineTo(9, -5); g.lineTo(9, 5); g.closePath(); g.fill();
+    g.strokeStyle = '#dfe8ff'; g.lineWidth = 2; g.beginPath(); g.moveTo(-16, 0); g.lineTo(-20, -4); g.moveTo(-16, 0); g.lineTo(-20, 4); g.stroke();
+    g.restore();
+  } else {
+    glow('#3b8cff', 20);
+    const rg = g.createRadialGradient(x - 3, y - 3, 1, x, y, 11);
+    rg.addColorStop(0, '#e6f2ff'); rg.addColorStop(.5, '#3b8cff'); rg.addColorStop(1, '#0d2f80');
+    g.fillStyle = rg; g.beginPath(); g.arc(x, y, 11, 0, 7); g.fill();
+    g.strokeStyle = '#e6f2ff'; g.lineWidth = 2; g.beginPath(); g.arc(x, y, 14, now / 80, now / 80 + 2.4); g.stroke();
+  }
+}
+
+function drawHead(g, now) {
+  const open = now < S.mouthUntil ? 1 : 0;
+  g.save(); g.translate(HEAD.x, HEAD.y); g.rotate(S.headAngle);
+  // neck/rock behind
+  g.fillStyle = '#20352f'; g.beginPath(); g.ellipse(0, -18, 78, 46, 0, 0, 7); g.fill();
+  // horns
+  g.fillStyle = '#2e2b24';
+  g.beginPath(); g.moveTo(-24, -26); g.bezierCurveTo(-60, -50, -66, -80, -40, -96); g.bezierCurveTo(-48, -70, -36, -50, -10, -34); g.closePath(); g.fill();
+  g.beginPath(); g.moveTo(24, -26); g.bezierCurveTo(60, -50, 66, -80, 40, -96); g.bezierCurveTo(48, -70, 36, -50, 10, -34); g.closePath(); g.fill();
+  // skull
+  const sk = g.createLinearGradient(0, -40, 0, 60);
+  sk.addColorStop(0, '#f1f3ea'); sk.addColorStop(1, '#b8c2ad');
+  g.fillStyle = sk; g.strokeStyle = '#6f7d60'; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(-38, -30); g.quadraticCurveTo(0, -52, 38, -30); g.lineTo(26, 30); g.quadraticCurveTo(0, 44, -26, 30); g.closePath(); g.fill(); g.stroke();
+  // lime crystal plates on the skull
+  g.fillStyle = '#a6d93a';
+  g.beginPath(); g.moveTo(-10, -36); g.lineTo(0, -20); g.lineTo(10, -36); g.lineTo(0, -44); g.closePath(); g.fill();
+  g.fillStyle = '#8fc22a';
+  g.beginPath(); g.moveTo(-6, -14); g.lineTo(6, -14); g.lineTo(3, 18); g.lineTo(-3, 18); g.closePath(); g.fill();
+  // eyes
+  g.fillStyle = '#1d2a12'; g.beginPath(); g.ellipse(-20, -6, 9, 6, .45, 0, 7); g.fill(); g.beginPath(); g.ellipse(20, -6, 9, 6, -.45, 0, 7); g.fill();
+  g.fillStyle = '#d8ff6a'; g.beginPath(); g.ellipse(-20, -6, 4, 2.5, .45, 0, 7); g.fill(); g.beginPath(); g.ellipse(20, -6, 4, 2.5, -.45, 0, 7); g.fill();
+  // jaw
+  g.fillStyle = '#c9d0bd'; g.strokeStyle = '#6f7d60';
+  g.beginPath(); g.moveTo(-20, 26); g.lineTo(-14, 52 + open * 12); g.lineTo(14, 52 + open * 12); g.lineTo(20, 26); g.closePath(); g.fill(); g.stroke();
+  if (open) { g.fillStyle = '#1a1a10'; g.fillRect(-12, 34, 24, 12); }
+  g.restore();
+}
+
+function drawHand(g, side) {
+  const h = S.hands[side]; const p = handPos(side);
+  const mirror = side === 2 ? -1 : 1;
+  // rock housing
+  g.fillStyle = '#1f3630'; g.beginPath(); g.ellipse(p.x, p.y - 44, 74, 40, 0, 0, 7); g.fill();
+  g.save(); g.translate(p.x, p.y); g.scale(mirror, 1); g.globalAlpha = h.hp > 0 ? 1 : .35;
+  const bone = g.createLinearGradient(0, -40, 0, 40);
+  bone.addColorStop(0, '#f2f3ec'); bone.addColorStop(1, '#bfc6b4');
+  g.fillStyle = bone; g.strokeStyle = '#6f7a66'; g.lineWidth = 2;
+  if (h.clench) {
+    g.beginPath(); g.roundRect ? g.roundRect(-28, -26, 56, 46, 16) : g.rect(-28, -26, 56, 46); g.fill(); g.stroke();
+    g.beginPath(); [-12, 0, 12].forEach(x => { g.moveTo(x, 0); g.lineTo(x, 18); }); g.stroke();
+  } else {
+    // wrist + palm
+    g.beginPath(); g.moveTo(-16, -50); g.lineTo(16, -50); g.lineTo(22, -14); g.lineTo(-22, -14); g.closePath(); g.fill(); g.stroke();
+    g.beginPath(); g.ellipse(0, -10, 28, 16, 0, 0, 7); g.fill(); g.stroke();
+    // fingers with dark talons
+    [[-22, -4, -34, 30], [-9, 2, -12, 40], [5, 2, 6, 42], [18, -2, 26, 34]].forEach(([a, b, c, d]) => {
+      g.strokeStyle = '#d9ddd1'; g.lineWidth = 8; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(a, b); g.quadraticCurveTo((a + c) / 2 - 3, (b + d) / 2, c, d); g.stroke();
+      g.strokeStyle = '#2a2a24'; g.lineWidth = 4;
+      g.beginPath(); g.moveTo(c, d); g.lineTo(c + (c < 0 ? -3 : 3), d + 9); g.stroke();
+    });
+    // thumb
+    g.strokeStyle = '#d9ddd1'; g.lineWidth = 8; g.beginPath(); g.moveTo(26, -14); g.lineTo(40, 2); g.stroke();
+    g.strokeStyle = '#2a2a24'; g.lineWidth = 4; g.beginPath(); g.moveTo(40, 2); g.lineTo(46, 8); g.stroke();
+  }
+  g.restore();
+  // OSRS-style health bar
+  const bx = p.x - 30, by = p.y - 70;
+  g.fillStyle = '#ff0000'; g.fillRect(bx, by, 60, 6);
+  g.fillStyle = '#00ff00'; g.fillRect(bx, by, 60 * h.hp / 600, 6);
+  g.strokeStyle = '#000'; g.lineWidth = 1; g.strokeRect(bx - .5, by - .5, 61, 7);
+  if (S.icon && h.type === 'melee') {
+    const x = p.x, y = p.y - 96;
+    g.fillStyle = 'rgba(8,8,6,.85)'; g.beginPath(); g.arc(x, y, 17, 0, 7); g.fill();
+    if (S.icon.id === 'crystal') {
+      g.fillStyle = '#7fe3d4'; g.beginPath(); g.moveTo(x, y - 12); g.lineTo(x + 8, y); g.lineTo(x, y + 12); g.lineTo(x - 8, y); g.closePath(); g.fill();
+    } else if (S.icon.id === 'lightning') {
+      g.fillStyle = '#ffe25a'; g.beginPath(); g.moveTo(x + 3, y - 13); g.lineTo(x - 7, y + 2); g.lineTo(x - 1, y + 2); g.lineTo(x - 4, y + 13); g.lineTo(x + 7, y - 3); g.lineTo(x + 1, y - 3); g.closePath(); g.fill();
+    } else {
+      g.strokeStyle = '#c58cff'; g.lineWidth = 3; g.beginPath(); for (let a = 0; a < 12; a += .3) { const r = a * 1.05; g.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); } g.stroke();
+    }
+  }
+  if (S.wheels) osrsText(g, h.type === 'mage' ? 'Mage hand' : 'Melee hand', p.x, p.y - 76, h.type === 'mage' ? '#9fc4ff' : '#ff9a8e', 16);
+}
+
+function drawPlayer(g, p, now) {
+  const x = px(p), y = py(p);
+  // true tile
+  if (p.you) { g.strokeStyle = '#00ffff'; g.lineWidth = 1.5; g.strokeRect(p.c * TW + 4, FLOOR_Y + p.r * TW + 4, TW - 8, TW - 8); }
+  g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.ellipse(x, y + 12, 12, 5, 0, 0, 7); g.fill();
+  // legs
+  g.fillStyle = p.you ? '#3a2a5a' : '#4a4a4a';
+  g.fillRect(x - 6, y + 2, 5, 11); g.fillRect(x + 1, y + 2, 5, 11);
+  // body (mage robe / melee armour)
+  g.fillStyle = p.you ? '#6a3fb0' : '#9a2a22';
+  g.beginPath(); g.moveTo(x - 10, y + 6); g.lineTo(x - 8, y - 12); g.lineTo(x + 8, y - 12); g.lineTo(x + 10, y + 6); g.closePath(); g.fill();
+  g.strokeStyle = '#000'; g.lineWidth = 1; g.stroke();
+  // head
+  g.fillStyle = '#d9a77a'; g.beginPath(); g.arc(x, y - 17, 6, 0, 7); g.fill(); g.stroke();
+  if (p.you) { g.fillStyle = '#4b2a85'; g.beginPath(); g.moveTo(x - 8, y - 19); g.lineTo(x, y - 32); g.lineTo(x + 8, y - 19); g.closePath(); g.fill(); }
+  else { g.fillStyle = '#9aa0a6'; g.beginPath(); g.arc(x, y - 19, 6.5, Math.PI, 0); g.fill(); }
+  // weapon
+  g.strokeStyle = p.you ? '#c8a46a' : '#cfd4d8'; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(x + 10, y + 4); g.lineTo(x + 14, y - 18); g.stroke();
+  // HP bar when recently hit
+  if (p.you && now < p.hitUntil) {
+    g.fillStyle = '#ff0000'; g.fillRect(x - 15, y - 44, 30, 5);
+    g.fillStyle = '#00ff00'; g.fillRect(x - 15, y - 44, 30 * S.hp / 99, 5);
+  }
+  if (p.you && S.prayer) drawOverhead(g, S.prayer, x, y - 56);
+  if (p.say && now < p.say.until) osrsText(g, p.say.text, x, y - 66, '#ffff00', 20);
+  if (p.you && S.tick < S.boundUntil) { g.strokeStyle = '#ffe25a'; g.lineWidth = 2; g.beginPath(); g.arc(x, y - 4, 17, 0, 7); g.stroke(); }
+  if (S.wheels) osrsText(g, p.name, x, y + 26, '#ffffff', 15);
+}
+
+function frame(now) {
+  if (S.running && !S.paused && !S.over) {
+    if (now - S.lastTickAt > S.tickMs * 6) S.lastTickAt = now;
+    while (now - S.lastTickAt >= S.tickMs) { S.lastTickAt += S.tickMs; doTick(); if (S.over) break; }
+    interp = Math.max(0, Math.min(1, (now - S.lastTickAt) / S.tickMs));
+  }
+  draw(now);
+  requestAnimationFrame(frame);
+}
+
+/* ---- input ---- */
+$('#startBtn').addEventListener('click', startRun);
+$('#ovStart').addEventListener('click', startRun);
+$('#pauseBtn').addEventListener('click', () => togglePause());
+$('#endBtn').addEventListener('click', () => endRun(false));
+$('#wheels').addEventListener('change', e => { S.wheels = e.target.checked; });
+$('#orbStyle').addEventListener('change', e => setLook(e.target.value));
+['#mirror', '#skipRow', '#route', '#mode'].forEach(id => $(id).addEventListener('change', () => { if (!S.running || S.over) S = makeState(false); }));
+$$('.pray-btn').forEach(b => b.addEventListener('click', () => setPrayer(b.dataset.p)));
+$('#eatBtn').addEventListener('click', eat);
+$('#restoreBtn').addEventListener('click', restore);
+$('#goHome').addEventListener('click', () => walkTo(S.home.c, S.home.r));
+$('#goMid').addEventListener('click', () => walkTo(S.mid.c, S.mid.r));
+$('#goRight').addEventListener('click', () => walkTo(S.right.c, S.right.r));
+cv.addEventListener('click', e => {
+  const r = cv.getBoundingClientRect();
+  const x = (e.clientX - r.left) * W / r.width;
+  const y = (e.clientY - r.top) * H / r.height;
+  if (y < FLOOR_Y) return;
+  walkTo(Math.floor(x / TW), Math.floor((y - FLOOR_Y) / TW));
+});
+document.addEventListener('keydown', e => {
+  if (currentTab !== 'sim') return;
+  if (e.target.closest && e.target.closest('select, input')) return;
+  const k = e.key.toLowerCase();
+  const map = {
+    q: () => setPrayer('magic'), w: () => setPrayer('missiles'), e: () => setPrayer('melee'),
+    '1': () => walkTo(S.home.c, S.home.r), '2': () => walkTo(S.mid.c, S.mid.r), '3': () => walkTo(S.right.c, S.right.r),
+    arrowleft: () => walkTo(S.you.tc - 1, S.you.tr), arrowright: () => walkTo(S.you.tc + 1, S.you.tr),
+    arrowup: () => walkTo(S.you.tc, S.you.tr - 1), arrowdown: () => walkTo(S.you.tc, S.you.tr + 1),
+    f: eat, r: restore, p: () => togglePause(),
+  };
+  if (map[k]) { e.preventDefault(); map[k](); }
+});
+document.addEventListener('visibilitychange', () => { if (document.hidden) togglePause(true); });
+
+/* ---- boot ---- */
+let savedLook = 'osrs';
+try { savedLook = localStorage.getItem('olm-look') || 'osrs'; } catch (e) {}
+$('#orbStyle').value = LOOKS[savedLook] ? savedLook : 'osrs';
+setLook($('#orbStyle').value);
+nextQuestion();
+updateHUD();
+requestAnimationFrame(frame);
+const h0 = (location.hash || '').slice(1);
+showTab(TABS.includes(h0) ? h0 : 'sim');
+})();
+</script>
