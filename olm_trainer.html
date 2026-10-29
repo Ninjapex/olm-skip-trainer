@@ -152,6 +152,9 @@ select { font-family: var(--font-body); font-size: .98rem; background: var(--sto
 .trk-cells div.next small { color: #3a2c05; }
 .trk-cells div.next::after { content: "NEXT"; position: absolute; top: -9px; right: 4px; font-family: var(--font-num); font-size: .85rem; line-height: 1; background: #000; color: var(--yellow); padding: 1px 4px; border-radius: 3px; }
 .trk-tip { font-size: .92rem; color: var(--muted); }
+.trk-phase { font-family: var(--font-ui); font-size: 1.05rem; color: var(--yellow); text-shadow: 1px 1px 0 #000; }
+#trkSet { color: var(--fg); background: var(--stone-2); border: 2px solid var(--stone-lo); border-radius: 4px; padding: 6px 10px; }
+#trkSet b { color: var(--orange); }
 .trk-tip b { color: var(--fg); }
 .trk-flag { font-family: var(--font-num); font-size: 1.15rem; color: var(--yellow); }
 /* real-raid tracker tab */
@@ -228,6 +231,7 @@ footer { margin-top: 32px; border-top: 2px solid var(--stone-lo); padding-top: 1
           <option value="recover">3 · Get lost &amp; recover</option>
           <option value="prayer">4 · Prayers only (like Jad)</option>
           <option value="full">5 · Full fight (skip + prayers)</option>
+          <option value="raid">6 · Full raid (all 4 phases)</option>
         </select></div>
       <div class="field"><label for="speed">Speed</label>
         <select id="speed"><option value="0.5" selected>0.5× (learning)</option><option value="0.75">0.75×</option><option value="1">1× (real ticks)</option></select></div>
@@ -241,6 +245,7 @@ footer { margin-top: 32px; border-top: 2px solid var(--stone-lo); padding-top: 1
         <select id="power"><option value="random" selected>Random</option><option value="acid">Acid</option><option value="flame">Flame</option><option value="crystal">Crystal</option><option value="all">All powers (2nd-to-last phase)</option><option value="none">None</option></select></div>
       <label class="check"><input type="checkbox" id="wheels" checked> Training wheels</label>
       <label class="check"><input type="checkbox" id="mirror"> Mirrored room</label>
+      <label class="check" title="A thrall chips the mage hand every 4 ticks, so the head turns reliably (Synq)"><input type="checkbox" id="thrall" checked> Thrall</label>
       <div class="ctrl-btns">
         <button class="btn primary" id="startBtn">Start</button>
         <button class="btn" id="pauseBtn">Pause</button>
@@ -261,10 +266,12 @@ footer { margin-top: 32px; border-top: 2px solid var(--stone-lo); padding-top: 1
     </div>
 
     <div class="tracker stone" id="tracker">
+      <div class="trk-row"><span class="trk-label">Phase</span><div class="trk-phase" id="trkPhase">Practice</div></div>
       <div class="trk-row"><span class="trk-label">Olm's cycle</span>
         <div class="trk-cells" id="trkCycle"><div>Basic 1<small>→ melee guy</small></div><div>Null<small>head turns</small></div><div>Basic 2<small>you tank, MID</small></div><div class="sp">Special<small>you're RIGHT</small></div></div></div>
       <div class="trk-row"><span class="trk-label">Specials order</span>
-        <div class="trk-cells" id="trkSpec"><div class="sp">Crystals</div><div class="sp">Lightning</div><div class="sp">Portals</div></div></div>
+        <div class="trk-cells" id="trkSpec"><div class="sp">Crystals</div><div class="sp">Lightning</div><div class="sp">Portals</div><div class="sp" id="trkHeal" hidden>Heal</div></div></div>
+      <p class="trk-tip" id="trkSet" hidden></p>
       <p class="trk-tip" id="trkTip"><b>Lost?</b> Wait for the next special and find it in the specials order. Then count <b>Basic 1, Null, Basic 2</b>, and the next special is the one after it.</p>
     </div>
 
@@ -331,7 +338,7 @@ footer { margin-top: 32px; border-top: 2px solid var(--stone-lo); padding-top: 1
       <div class="card stone"><span class="eyebrow">#1 mistake</span><p>Running right as soon as the head turns to you. You <b>must tank Basic 2 in the middle first</b>. If you leave early, Olm loses a basic instead and the special still comes.</p></div>
       <div class="card stone"><span class="eyebrow">It broke</span><p>You start seeing specials again (Crystal Burst, Swap, Lightning). Don't panic: look at which side the special happened on, then set it again (step 4).</p></div>
       <div class="card stone"><span class="eyebrow">Melee guy breaks it</span><p>Hitting the melee hand harder than you hit the mage hand, or stepping past his tile, makes the head go the wrong way on the null.</p></div>
-      <div class="card stone"><span class="eyebrow">Head stuck in the middle</span><p>If players bunch up near the centre, Olm faces the <b>middle</b>. For your Basic 2 the head must be turned <b>fully</b> to your side. If it looks at the middle, tank that attack and go back to your side to keep it set.</p></div>
+      <div class="card stone"><span class="eyebrow">Head stuck in the middle</span><p>Olm faces the <b>middle</b> if players bunch up near the centre, if your melee guy steps past his tile, or if the claws only took <b>zeros</b> before the null (splashes, no thrall). For your Basic 2 the head must be turned <b>fully</b> to your side. If it looks at the middle, tank that attack and go back to your side to keep it set.</p></div>
     </div>
 
     <div class="card stone">
@@ -588,10 +595,14 @@ const LAYOUT = {
 };
 const ROT = ['std', 'empty', 'std', 'special'];
 const SPECIALS = [{ id: 'crystal', name: 'Crystal Burst' }, { id: 'lightning', name: 'Lightning' }, { id: 'swap', name: 'Swap' }];
+const HEAL = { id: 'heal', name: 'Healing hand' };
+// the healing hand comes after the teleport in the 2nd-to-last (all powers) phase
+const specList = () => S && S.power === 'all' ? [...SPECIALS, HEAL] : SPECIALS;
 const SPHERE_PRAY = { red: 'melee', green: 'missiles', purple: 'magic' };
 const STYLE_PRAY = { magic: 'magic', ranged: 'missiles' };
 const autoPray = () => S.mode === 'skip' || S.mode === 'set' || S.mode === 'recover';
 const HEAD = { x: W / 2, y: 64 };
+const CLAW_HP = 600, HEAD_HP = 800;   // claw HP from the wiki; the head's duo HP is an estimate
 const MOUTH = { x: W / 2, y: 128 };
 
 const cv = $('#cv');
@@ -670,8 +681,8 @@ function makeState(running) {
   const you = { name: 'You', you: true, c: st0.c, r: st0.r, pc: st0.c, pr: st0.r, tc: st0.c, tr: st0.r, hitUntil: 0, say: null };
   const mate = { name: 'Melee guy', c: mel.c, r: mel.r, pc: mel.c, pr: mel.r, tc: mel.c, tr: mel.r, home: mel, hitUntil: 0, say: null };
   const hands = {};
-  hands[mageSide] = { type: 'mage', hp: 600, hits: [], clench: 0 };
-  hands[2 - mageSide] = { type: 'melee', hp: 600, hits: [], clench: 0 };
+  hands[mageSide] = { type: 'mage', hp: CLAW_HP, hits: [], clench: 0, down: false };
+  hands[2 - mageSide] = { type: 'melee', hp: CLAW_HP, hits: [], clench: 0, down: false };
   const startFacing = 2 - mageSide;   // Olm starts on the melee side: basic 1 goes to your melee guy
   return {
     running, paused: false, over: false, pauseAt: 0,
@@ -688,14 +699,18 @@ function makeState(running) {
     hp: 99, pp: 99, prayer: null, sharks: 10, restores: 6, boundUntil: 0,
     hands, mageSide, meleeSide: 2 - mageSide,
     proj: [], events: [], crystals: [], bolts: [], notices: [], splats: [], casts: [], puffs: [],
-    icon: null, swapLink: null,
+    icon: null, swapLink: null, thrall: $('#thrall').checked, zerosUntil: 0,
     // phase power: Olm's phase attacks replace some basics (they still count as basics)
-    power: pickPower(), lastPhaseAtk: null, pools: {}, drip: null, burn: null, firewall: null, fall: null, fallMarks: [], bombs: [],
+    // full raid: 3 claw phases (two single powers, then all powers) and the head phase
+    raid: mode === 'raid', phase: 1, powerOrder: ['acid', 'flame', 'crystal'].sort(() => Math.random() - .5),
+    headPhase: false, headHp: HEAD_HP, transition: null, siphon: null, won: false, phaseTimes: [],
+    power: mode === 'raid' ? null : pickPower(), lastPhaseAtk: null, pools: {}, drip: null, burn: null, firewall: null, fall: null, fallMarks: [], bombs: [],
     stats: { skipped: 0, taken: 0, lost: 0, onMate: 0, recov: [], lostTaken: 0, pOk: 0, pBad: 0, sOk: 0, sBad: 0, sapped: 0, dmg: 0, react: [], ticks: 0 },
     react: null,
   };
 }
 S = makeState(false);
+if (S.raid) S.power = S.powerOrder[0];
 
 /* ---- chatbox ---- */
 const chatEl = $('#chat');
@@ -761,9 +776,14 @@ function doTick() {
   due.forEach(e => e.fn());
   phaseTick();
   if (S.mode === 'recover') lostEvents();
-  if (S.tick % 4 === 2) mageCast();
-  if (S.tick % 4 === 1) meleeGuyHit();
-  if (S.tick % 4 === 0) olmAct();
+  if (S.transition) transitionTick();
+  else {
+    if (S.tick % 4 === 2) mageCast();
+    if (S.tick % 4 === 1) meleeGuyHit();
+    if (S.tick % 4 === 3) thrallHit();
+    if (S.tick % 4 === 0) olmAct();
+  }
+  if (S.raid && S.headPhase) headPhaseTick();
   if (S.prayer && S.tick % 5 === 0) {
     S.pp = Math.max(0, S.pp - 1);
     if (S.pp === 0) { S.prayer = null; chat('You have run out of Prayer points, you can recharge at an altar.', 'bad'); }
@@ -784,12 +804,13 @@ function openingSpec(p) {
   const h = S.hands[S.meleeSide];
   if (h.clench || h.hp <= 0) return;
   S.casts.push({ t: S.tick, from: p, side: S.meleeSide });
-  const d = rand(14, 52);
+  const d = rand(8, 40);
   h.hits.push({ t: S.tick, d });
   h.hp = Math.max(1, h.hp - d);
   const hp = handPos(S.meleeSide);
   S.events.push({ t: S.tick + 1, fn: () => splat(hp.x + (p.you ? -14 : 14), hp.y, d, 'red') });
-  if (d >= 30) {
+  // the melee hand clenches once it takes 5% of its health (30) within 8 ticks
+  if (h.hits.filter(k => S.tick - k.t <= 8).reduce((a, k) => a + k.d, 0) >= 30) {
     h.clench = S.tick + 50; S.opening = false; S.crippled = true;
     chat('The Great Olm\'s left claw clenches to protect itself temporarily.', 'olm');
     notice('Melee hand crippled! Go LEFT and set the head', 'good', 2600);
@@ -800,39 +821,63 @@ function openingSpec(p) {
 function lostEvents() {
   if (S.lost || S.tick < S.nextLostAt || S.stepIdx % 4 !== 1 || S.tick % 4 !== 1) return;   // the tick right after Basic 1
   S.lost = true; S.lostAt = S.tick; S.lostSide = null;
-  if (Math.random() < .5) {
+  const kind = pick(['splash', 'trap', 'drift', 'zeros']);
+  if (kind === 'splash') {
     S.splashUntil = S.tick + 5;
     notice('You splashed and your melee guy hit the melee hand!', 'bad', 2600);
-    chat('The head will swing to the melee side on the null.', 'olm');
-  } else {
+  } else if (kind === 'trap') {
     S.boundUntil = S.tick + 12;
     notice('A fire wall trapped you: you can\'t move!', 'bad', 2600);
+  } else if (kind === 'drift') {
+    // he steps past his marked tile toward the centre: the head will face the middle (Synq)
+    const m = S.mate, c = S.mirror ? 5 : 9;
+    m.tc = c; m.tr = 0;
+    S.events.push({ t: S.tick + 14, fn: () => { m.tc = m.home.c; m.tr = m.home.r; } });
+    notice('Your melee guy stepped past his tile into the centre!', 'bad', 2600);
+  } else {
+    // everyone hits zeros on the claw before the null: the head looks to the middle (Daep)
+    S.zerosUntil = S.tick + 4;
+    notice('Zeros on the mage hand (no thrall damage either)!', 'bad', 2600);
   }
   chat('You lost the skip. Watch where the special lands, then set it again.', 'coach');
 }
 
 function mageCast() {
   if (S.opening) return openingSpec(S.you);
+  if (S.raid) return raidHit(S.you, rand(6, 36), .1, false);
   if (S.tick < S.splashUntil) {
     const hp = handPos(S.mageSide);
     S.casts.push({ t: S.tick, from: S.you, side: S.mageSide });
+    S.hands[S.mageSide].hits.push({ t: S.tick, d: 0 });
     S.events.push({ t: S.tick + 1, fn: () => splat(hp.x, hp.y - 4, 0, 'blue') });
     return;
   }
   const h = S.hands[S.mageSide];
   S.casts.push({ t: S.tick, from: S.you, side: S.mageSide });
   if (h.hp <= 0) return;
-  const d = rand(4, 32);
-  h.hits.push({ t: S.tick, d: Math.max(d, 1) });
+  const d = S.tick < S.zerosUntil || Math.random() < .1 ? 0 : rand(6, 36);   // spells splash sometimes
+  h.hits.push({ t: S.tick, d });
   h.hp = Math.max(0, h.hp - d);
   const hp = handPos(S.mageSide);
-  S.events.push({ t: S.tick + 1, fn: () => splat(hp.x, hp.y - 4, d, 'red') });
+  S.events.push({ t: S.tick + 1, fn: () => splat(hp.x, hp.y - 4, d, d ? 'red' : 'blue') });
+  if (h.hp === 0) resetClaw(h);
+}
+// Thrall: chips the mage hand (max hit 3) every 4 ticks, so there's always some damage for the head to follow
+function thrallHit() {
+  if (S.raid) { if (S.thrall && !S.opening) raidHit(S.you, rand(1, 3), 0, true); return; }
+  const h = S.hands[S.mageSide];
+  if (!S.thrall || S.opening || h.hp <= 0) return;
+  const d = S.tick < S.zerosUntil ? 0 : rand(1, 3);
+  h.hits.push({ t: S.tick, d });
+  h.hp = Math.max(0, h.hp - d);
+  S.casts.push({ t: S.tick, from: S.you, side: S.mageSide, thrall: true });
   if (h.hp === 0) resetClaw(h);
 }
 // Duo: your melee guy stays on the melee side on long range and attacks the MAGE hand too (Synq, Qevon),
 // so the mage hand always has the most damage and Olm's head swings to the mage side on the null.
 function meleeGuyHit() {
   if (S.opening) return openingSpec(S.mate);
+  if (S.raid) return raidHit(S.mate, S.headPhase ? rand(6, 34) : S.phase === 3 || S.hands[S.mageSide].down ? rand(10, 40) : rand(4, 28), .15, false);
   if (S.tick < S.splashUntil) {   // the mistake: he hits the melee hand, so it has the most damage on the null
     const h = S.hands[S.meleeSide], d = rand(12, 26);
     S.casts.push({ t: S.tick, from: S.mate, side: S.meleeSide });
@@ -845,29 +890,158 @@ function meleeGuyHit() {
   const h = S.hands[S.mageSide];
   if (h.hp <= 0 || zoneOf(S.mate.c) !== S.meleeSide) return;
   S.casts.push({ t: S.tick, from: S.mate, side: S.mageSide });
-  const d = rand(4, 28);
-  h.hits.push({ t: S.tick, d: Math.max(d, 1) });
+  const d = S.tick < S.zerosUntil || Math.random() < .15 ? 0 : rand(4, 28);
+  h.hits.push({ t: S.tick, d });
   h.hp = Math.max(0, h.hp - d);
   const hp = handPos(S.mageSide);
-  S.events.push({ t: S.tick + 1, fn: () => splat(hp.x + 14, hp.y + 6, d, 'red') });
+  S.events.push({ t: S.tick + 1, fn: () => splat(hp.x + 14, hp.y + 6, d, d ? 'red' : 'blue') });
   if (h.hp === 0) resetClaw(h);
 }
+/* ================= FULL RAID ================= */
+// Who attacks what: the mage hand first; in phase 3 your melee guy kills the melee hand first (Synq); then the last claw; then the head.
+function raidTarget(isMate) {
+  if (S.headPhase) return 'head';
+  const mage = S.hands[S.mageSide], mel = S.hands[S.meleeSide];
+  if (isMate && S.phase === 3 && !mel.down) return S.meleeSide;
+  if (!mage.down) return S.mageSide;
+  return mel.down ? null : S.meleeSide;
+}
+function raidHit(p, d, miss, thrall) {
+  const tgt = raidTarget(!p.you);
+  if (tgt === null) return;
+  if (Math.random() < miss || S.tick < S.zerosUntil) d = 0;
+  if (tgt === 'head') {
+    S.casts.push({ t: S.tick, from: p, head: true, thrall });
+    S.headHp = Math.max(0, S.headHp - d);
+    if (!thrall) S.events.push({ t: S.tick + 1, fn: () => splat(HEAD.x + (p.you ? -18 : 18), HEAD.y + 30, d, d ? 'red' : 'blue') });
+    if (S.headHp === 0) raidWon();
+    return;
+  }
+  const h = S.hands[tgt], hp = handPos(tgt);
+  S.casts.push({ t: S.tick, from: p, side: tgt, thrall });
+  if (tgt === S.meleeSide && h.clench) { if (!thrall) splat(hp.x, hp.y - 4, 0, 'blue'); return; }
+  if (h.healUntil && S.tick < h.healUntil && d) {   // healing hand: damage heals it
+    h.hp = Math.min(CLAW_HP, h.hp + d);
+    if (!thrall) S.events.push({ t: S.tick + 1, fn: () => splat(hp.x, hp.y - 4, d, 'heal') });
+    return;
+  }
+  h.hits.push({ t: S.tick, d });
+  h.hp = Math.max(0, h.hp - d);
+  if (!thrall) S.events.push({ t: S.tick + 1, fn: () => splat(hp.x + (p.you ? 0 : 14), hp.y - 4, d, d ? 'red' : 'blue') });
+  if (tgt === S.meleeSide && !S.hands[S.mageSide].down && h.hits.filter(k => S.tick - k.t <= 8).reduce((a, k) => a + k.d, 0) >= 30) {
+    h.clench = S.tick + 50;
+    chat('The Great Olm\'s left claw clenches to protect itself temporarily.', 'olm');
+  }
+  if (h.hp === 0) clawDown(tgt);
+}
+function clawDown(side) {
+  const h = S.hands[side], other = S.hands[2 - side];
+  h.down = true; h.clench = 0; h.healUntil = 0;
+  notice(`${h.type === 'mage' ? 'Mage' : 'Melee'} hand down!`, 'good', 2000);
+  if (other.down) return phaseEnd();
+  if (S.phase === 3) {
+    // 2nd-to-last phase: a downed claw comes back after ~30 s unless the other one dies too
+    chat('Kill the other claw within 30 seconds or this one comes back.', 'coach');
+    S.events.push({ t: S.tick + 50, fn: () => {
+      if (h.down && !other.down && !S.transition) { h.down = false; h.hp = CLAW_HP; notice('The claw came back at full health! Get both low, then finish them together', 'bad', 3000); }
+    } });
+  }
+}
+function clearHazards() {
+  S.pools = {}; S.drip = null; S.burn = null; S.firewall = null; S.fall = null; S.fallMarks = []; S.bombs = [];
+  S.proj = []; S.crystals = []; S.bolts = []; S.swapLink = null; S.portalUntil = 0; S.siphon = null; S.catchUp = false;
+}
+function phaseEnd() {
+  S.phaseTimes.push(S.stats.ticks);
+  clearHazards();
+  S.transition = { until: S.tick + 22, left: 8, next: S.tick + 3 };
+  S.lost = false;
+  notice(`Phase ${S.phase} done! Olm sinks into the floor`, 'good', 2600);
+  chat('Crystals are falling: keep moving until Olm rises again.', 'coach');
+}
+// Between phases: 8 targeted crystals fall (3x3 area), then Olm rises on the other wall with a new power.
+function transitionTick() {
+  const T = S.transition;
+  if (T.left > 0 && S.tick >= T.next) {
+    const t = S.players[T.left % 2];
+    S.fallMarks.push({ c: t.c, r: t.r, land: S.tick + 3, aoe: true });
+    T.left--; T.next = S.tick + 2;
+  }
+  if (S.tick >= T.until) olmRises();
+}
+function olmRises() {
+  S.transition = null;
+  S.phase++;
+  S.headPhase = S.phase === 4;
+  S.power = S.phase === 2 ? S.powerOrder[1] : 'all';
+  S.lastPhaseAtk = null;
+  [0, 2].forEach(side => Object.assign(S.hands[side], { hp: CLAW_HP, hits: [], clench: 0, down: S.headPhase, healUntil: 0 }));
+  S.stepIdx = 0; S.specIdx = 0; S.catchUp = false;
+  S.facing = S.meleeSide; S.headAngle = headTarget(S.facing); S.turn = null;
+  S.opening = !S.headPhase; S.crippled = false; S.reachedLeft = S.headPhase; S.seenSpecial = true;
+  // it rose on the other wall: you both cross the room and come in from the far side
+  Object.assign(S.you, { c: 7, r: ROWS - 1, pc: 7, pr: ROWS - 1, tc: S.headPhase ? S.mid.c : S.thumb.c, tr: S.headPhase ? 2 : S.thumb.r });
+  Object.assign(S.mate, { c: 9, r: ROWS - 1, pc: 9, pr: ROWS - 1, tc: S.mate.home.c, tr: S.mate.home.r });
+  if (S.headPhase) {
+    chat('The Great Olm is giving its all. This is its final stand!', 'olm');
+    notice('HEAD PHASE: kill the head!', 'good', 3000);
+  } else {
+    chat(`The Great Olm rises with the power of ${POWER_NAME[S.power]}!`, 'olm');
+    notice(`Phase ${S.phase} of 4: ${S.phase === 3 ? 'all powers + Heal' : POWER_NAME[S.power]}`, 'good', 3000);
+  }
+}
+// Head phase: crystals keep falling, one follows a random player, and Life Siphon marks two safe tiles.
+function headPhaseTick() {
+  if (S.transition || S.over) return;
+  if (!S.fall) S.fall = { target: pick(S.players), left: 11 };
+  if (S.tick % 3 === 0) S.fallMarks.push({ c: rand(0, COLS - 1), r: rand(0, 5), land: S.tick + 2 });
+  const sp = S.siphon;
+  if (sp && S.tick >= sp.at) {
+    const safe = sp.tiles.some(t => t.c === S.you.c && t.r === S.you.r);
+    if (safe) chat('You stood on a siphon tile: no damage.', 'good');
+    else { const d = rand(10, 18); hurt(d); S.headHp = Math.min(HEAD_HP, S.headHp + d * 5); notice(`Life Siphon: Olm healed ${d * 5}`, 'bad', 2200); }
+    S.siphon = null;
+  }
+}
+function lifeSiphon() {
+  const tiles = [];
+  while (tiles.length < 2) { const t = { c: rand(1, COLS - 2), r: rand(1, 4) }; if (!tiles.some(o => o.c === t.c && o.r === t.r)) tiles.push(t); }
+  S.siphon = { tiles, at: S.tick + 10 };
+  notice('LIFE SIPHON: stand on a blue tile!', 'bad', 2400);
+}
+function raidWon() {
+  if (S.won) return;
+  S.won = true; S.phaseTimes.push(S.stats.ticks);
+  chat('The Great Olm is dead!', 'good');
+  endRun(false);
+}
+const PHASE_SET = {
+  1: '<b>How to set:</b> spec the melee hand until it cripples, go LEFT, then tank Basic 2 on the MIDDLE, step RIGHT for the special, and back LEFT. Kill the mage hand, then the melee hand.',
+  2: '<b>How to set:</b> same as phase 1. Olm rose on the other wall, so get to your tiles first. Dodge Basic 1 if it\'s a fire wall.',
+  3: '<b>How to set (2nd-to-last):</b> all powers + Heal. Your melee guy kills the melee hand first while you keep skipping (Heal comes after Portals; skip it the same way). A downed claw comes back after 30 s, so finish both close together.',
+  4: '<b>Head phase:</b> no more Crystal Burst, Lightning or Swap. Kill the head, keep walking out of falling crystals, and stand on a blue tile when Life Siphon comes.',
+};
+
 function resetClaw(h) {
   chat(`${h.type === 'mage' ? 'Mage' : 'Melee'} hand down. Reset for practice.`);
   S.events.push({ t: S.tick + 4, fn: () => { h.hp = 600; h.clench = 0; } });
 }
 
 // On the null Olm scans nobody, so its head turns toward the claw that took the most damage in the last 4 ticks.
+// If the claws were only hit for zeros, the head looks to the middle instead (Daep).
 function clawPull() {
-  const dmg = side => S.hands[side].hits.filter(k => S.tick - k.t <= 4).reduce((a, k) => a + k.d, 0);
-  const l = dmg(0), r = dmg(2);
-  if (!l && !r) return null;
+  const recent = side => S.hands[side].hits.filter(k => S.tick - k.t <= 4);
+  const hl = recent(0), hr = recent(2);
+  if (!hl.length && !hr.length) return null;
+  const l = hl.reduce((a, k) => a + k.d, 0), r = hr.reduce((a, k) => a + k.d, 0);
+  if (!l && !r) return 1;
   return l >= r ? 0 : 2;
 }
 
 function olmAct() {
   let step = ROT[S.stepIdx % 4];
   if (S.mode === 'prayer' && step === 'special') step = 'empty';
+  if (S.raid && S.headPhase && step === 'special' && S.siphon) step = 'empty';
   S.olmActs++;
   [0, 2].forEach(side => { S.hands[side].hits = S.hands[side].hits.filter(k => S.tick - k.t <= 8); });
   const counts = [0, 1, 2].map(f => S.players.filter(p => sees(f, p.c)).length);
@@ -878,7 +1052,7 @@ function olmAct() {
     // the null: no attack, the head swings toward the most-damaged claw
     const pull = S.mode === 'prayer' ? S.mageSide : clawPull();
     if (pull !== null && pull !== S.facing) {
-      setFacing(pull, 'null: most-damaged claw');
+      setFacing(pull, pull === 1 ? 'null: only zero hits on the claws' : 'null: most-damaged claw');
       if (pull === S.mageSide && S.mode !== 'prayer' && !S.opening && S.reachedLeft) S.seenSpecial = true;
     }
     if (S.catchUp && counts[S.facing] > 0) { standardAttack(true); S.catchUp = false; }
@@ -890,9 +1064,9 @@ function olmAct() {
       if (S.stepIdx % 4 === 2 && S.reachedLeft) notice('Too early: tank Basic 2 BEFORE you step right', 'bad');
       else chat('Nobody on Olm\'s side: it turned and lost a basic (it will catch up).', 'olm');
     }
-    else if (S.hands[S.meleeSide].clench) { /* crippled: there was no special to skip */ }
+    else if (S.hands[S.meleeSide].clench && !S.headPhase) { /* crippled: there was no special to skip */ }
     else {
-      const sp = SPECIALS[S.specIdx % 3]; S.specIdx++;
+      const sp = specList()[S.specIdx % specList().length]; S.specIdx++;
       S.stats.skipped++;
       S.you.say = { text: 'Skipped!', until: performance.now() + 1500 };
       if (S.lost) {
@@ -908,8 +1082,8 @@ function olmAct() {
   } else {
     if (S.catchUp) { standardAttack(true); S.catchUp = false; }
     if (step === 'std') standardAttack(false);
-    else if (S.hands[S.meleeSide].clench) chat('The melee hand is crippled: no special this time.', 'olm');
-    else doSpecial(SPECIALS[S.specIdx++ % 3]);
+    else if (S.hands[S.meleeSide].clench && !S.headPhase) chat('The melee hand is crippled: no special this time.', 'olm');
+    else doSpecial(specList()[S.specIdx++ % specList().length]);
     // it still acted, but swerves if another view now holds more players
     if (counts[best] > counts[S.facing]) setFacing(best, 'more players there');
   }
@@ -1002,7 +1176,8 @@ function phaseTick() {
   S.fallMarks = S.fallMarks.filter(m => {
     if (m.land > S.tick) return true;
     S.puffs.push({ x: tileX(m.c), y: tileY(m.r), col: '#9ff0e2', born: performance.now() });
-    if (you.c === m.c && you.r === m.r) hurt(rand(15, 20));
+    if (m.aoe) { const d = cheb(m, you); if (d === 0) hurt(rand(20, 25)); else if (d === 1) hurt(rand(12, 16)); }
+    else if (you.c === m.c && you.r === m.r) hurt(rand(15, 20));
     return false;
   });
   // crystal bombs: 15 damage at 4 tiles, +15 for every tile closer
@@ -1025,7 +1200,7 @@ function standardAttack(isCatchUp) {
     phaseAttack();
     return;
   }
-  const sphereChance = S.mode === 'prayer' ? .25 : S.mode === 'full' ? .15 : 0;
+  const sphereChance = S.mode === 'prayer' ? .25 : S.mode === 'full' || S.mode === 'raid' ? .15 : 0;
   if (!isCatchUp && Math.random() < sphereChance) {
     const t = targets.includes(S.you) && Math.random() < .75 ? S.you : pick(targets);
     launchSphere(pick(['red', 'green', 'purple']), t);
@@ -1072,15 +1247,20 @@ function landProj(pr) {
 }
 
 function doSpecial(sp) {
+  if (S.raid && S.headPhase) { S.icon = null; lifeSiphon(); return; }   // the head phase has no generic specials
   S.icon = { id: sp.id, until: S.tick + 3 };
   S.seenSpecial = true;
-  if (S.lost) { S.stats.lostTaken++; S.lostSide = S.facing === S.meleeSide ? 'melee' : 'mage'; }
+  if (S.lost) { S.stats.lostTaken++; S.lostSide = S.facing === 1 ? 'middle' : S.facing === S.meleeSide ? 'melee' : 'mage'; }
   if (!sees(S.facing, S.you.c)) {
     S.stats.onMate++;
     notice(`${sp.name} on your melee guy. Count from here!`, 'info', 2400);
   } else {
     S.stats.taken++;
     notice(`${sp.name} hit you. ${S.mode === 'set' && !S.stats.skipped ? 'Count from here!' : 'Move earlier!'}`, 'bad', 2200);
+  }
+  if (sp.id === 'heal') {
+    S.hands[S.meleeSide].healUntil = S.tick + 16;
+    chat('The melee hand glows: damage heals it for a while.', 'olm');
   }
   if (sp.id === 'crystal') {
     S.players.forEach(p => {
@@ -1139,10 +1319,12 @@ function restore() {
 /* ---- run control ---- */
 function startRun() {
   S = makeState(true);
+  if (S.raid) S.power = S.powerOrder[0];
   $('#ov').hidden = true;
   $('#pauseBtn').textContent = 'Pause';
   chatEl.innerHTML = '';
   if (S.power !== 'none' && S.mode !== 'prayer') { chat(`The Great Olm rises with the power of ${POWER_NAME[S.power]}!`, 'olm'); notice(`Olm rises with the power of ${POWER_NAME[S.power]}`, 'info', 2400); }
+  if (S.raid) chat('Full raid: 3 claw phases, then the head. Phase 1 starts now.', 'coach');
   chat(S.mode === 'prayer' ? 'Pray against every attack. Prayer orbs: switch after launch.' : S.mode === 'recover' ? 'The skip is running. Keep it going until something breaks it, then recover.' : 'Phase start: spec the melee hand until it cripples, then go LEFT and set the head.', 'coach');
   updateHUD();
 }
@@ -1160,6 +1342,10 @@ function summaryHTML(died) {
   const pt = st.pOk + st.pBad;
   const avg = st.react.length ? Math.round(st.react.reduce((a, b) => a + b, 0) / st.react.length) + ' ms' : '—';
   const rows = [];
+  if (S.raid) {
+    rows.push(['Result', S.won ? 'Olm defeated!' : `Died in ${S.headPhase ? 'the head phase' : 'phase ' + S.phase}`]);
+    S.phaseTimes.forEach((t, i) => rows.push([i < 3 ? `Phase ${i + 1} done at` : 'Head killed at', (t * .6).toFixed(0) + ' s']));
+  }
   if (S.mode === 'set') rows.push(['Time to set the skip', S.setAt === null ? 'not set' : (S.setAt * .6).toFixed(1) + ' s']);
   if (S.mode === 'recover') {
     const r = st.recov;
@@ -1178,7 +1364,7 @@ function summaryHTML(died) {
   if (S.mode !== 'prayer' && st.taken > st.skipped) tip = 'Tip: tank basic 2 on the MIDDLE tile, then step RIGHT. Run back LEFT when the head turns.';
   else if (!autoPray() && st.sapped) tip = 'Tip: let the sphere launch first, then switch.';
   else if (!autoPray() && pt && st.pBad / pt > .2) tip = `Tip: ${look.magic.name} = MAGE, ${look.ranged.name.toLowerCase()} = RANGE.`;
-  return `<h3>${died ? 'Oh dear, you are dead!' : 'Run summary'}</h3>
+  return `<h3>${died ? 'Oh dear, you are dead!' : S.won ? 'Olm defeated!' : 'Run summary'}</h3>
     <div class="sumgrid">${rows.map(r => `<span>${r[0]}</span><span>${r[1]}</span>`).join('')}</div>
     ${tip ? `<p class="muted">${tip}</p>` : ''}
     <button class="btn primary" id="ovAgain">Go again</button>`;
@@ -1211,11 +1397,23 @@ function coach() {
   if (S.running && !S.over && !S.wheels && S.lost && !S.lostSide) return { text: 'LOST! Find your count again', target: null };
   if (!S.running || S.over || !S.wheels || S.mode === 'prayer') return null;
   if (S.tick < S.portalUntil) return { text: 'SWAP! Meet at the THUMB tile', target: S.thumb, hot: true };
+  if (S.raid) {
+    if (S.transition) return { text: 'Olm is underground: keep moving out of the crystals', target: null, hot: true };
+    if (S.headPhase) {
+      if (S.siphon) { const t = S.siphon.tiles.reduce((a, b) => cheb(a, S.you) <= cheb(b, S.you) ? a : b); return { text: 'LIFE SIPHON: stand on a blue tile!', target: t, hot: true }; }
+      const ph = phaseCoach(); if (ph) return ph;
+      return { text: 'Head phase: attack the head, keep walking out of crystals', target: null };
+    }
+    const mage = S.hands[S.mageSide], mel = S.hands[S.meleeSide];
+    if (!S.opening && mage.down && !mel.down) return { text: 'Mage hand down: everyone on the MELEE hand now', target: null };
+    if (S.phase === 3 && !S.opening && mel.down && !mage.down) return { text: 'Melee hand down: kill the mage hand within 30 s!', target: null, hot: true };
+  }
   if (S.opening) return { text: 'Phase start: everyone spec the MELEE hand', target: null };
   const ph = phaseCoach();
   if (ph) return ph;
   if (S.lost) {
     if (!S.lostSide) return { text: 'LOST! Watch where the next special lands', target: null };
+    if (S.lostSide === 'middle') return { text: 'Head stuck in the MIDDLE: tank that, go back LEFT, then run the route', target: null };
     return S.lostSide === 'melee'
       ? { text: 'It hit the MELEE side: go LEFT, tank Basic 2 MIDDLE, then RIGHT', target: null }
       : { text: 'It hit YOUR side: count Basic 1, Null, Basic 2 (MIDDLE), then RIGHT', target: null };
@@ -1257,10 +1455,21 @@ function updateHUD() {
   if (!autoPray()) rows.push(['Prayer accuracy', pt ? Math.round(st.pOk / pt * 100) + '%' : '—'], ['Spheres blocked', `${st.sOk}/${st.sOk + st.sBad}`]);
   rows.push(['Damage taken', st.dmg]);
   $('#stats').innerHTML = rows.map(r => `<span>${r[0]}</span><b>${r[1]}</b>`).join('');
+  const phEl = $('#trkPhase'), setEl = $('#trkSet');
+  if (S.raid) {
+    phEl.textContent = S.transition ? `Between phases (after phase ${S.phase}): Olm is underground`
+      : S.headPhase ? `Head phase (4 of 4) · head ${S.headHp}/${HEAD_HP}`
+      : `Phase ${S.phase} of 4 · ${S.phase === 3 ? 'All powers + Heal' : POWER_NAME[S.power]}`;
+    setEl.hidden = false; setEl.innerHTML = PHASE_SET[S.transition ? Math.min(S.phase + 1, 4) : S.phase];
+  } else {
+    phEl.textContent = S.mode === 'prayer' || S.power === 'none' ? 'Practice' : `Practice · ${POWER_NAME[S.power] || ''}`;
+    setEl.hidden = true;
+  }
   // order tracker: hidden highlights in the "Set the skip" drill (you find it yourself) and with training wheels off
   const showNext = S.running && S.wheels && S.mode !== 'set' && !S.lost;
   $$('#trkCycle div').forEach((d, i) => d.classList.toggle('next', showNext && i === S.stepIdx % 4));
-  $$('#trkSpec div').forEach((d, i) => d.classList.toggle('next', showNext && S.mode !== 'prayer' && i === S.specIdx % 3));
+  $('#trkHeal').hidden = S.power !== 'all';
+  $$('#trkSpec div').forEach((d, i) => d.classList.toggle('next', showNext && S.mode !== 'prayer' && i === S.specIdx % specList().length));
   const mh = S.hands[S.meleeSide];
   $('#trkTip').innerHTML = S.lost ? '<span class="trk-flag">LOST.</span> Watch which side the next special lands on, then set the head again.'
     : S.opening ? '<span class="trk-flag">Phase start:</span> spec the melee hand until it cripples.'
@@ -1278,7 +1487,7 @@ function drawHitsplat(g, s, now) {
   const age = (now - s.born) / 1000;
   const y = s.y - age * 6;
   g.save(); g.translate(s.x, y);
-  g.fillStyle = s.col === 'blue' ? '#2b5fd9' : '#b3150b';
+  g.fillStyle = s.col === 'blue' ? '#2b5fd9' : s.col === 'heal' ? '#1f9a2e' : '#b3150b';
   g.strokeStyle = '#000'; g.lineWidth = 1.5;
   g.beginPath();
   for (let i = 0; i < 10; i++) {
@@ -1366,6 +1575,14 @@ function draw(now) {
     g.beginPath(); g.moveTo(x - k, y - k); g.lineTo(x + k, y + k); g.moveTo(x + k, y - k); g.lineTo(x - k, y + k); g.stroke();
   }
 
+  // life siphon: two blue safe tiles
+  if (S.siphon) {
+    S.siphon.tiles.forEach(t => {
+      g.fillStyle = `rgba(60,140,255,${.35 + .2 * Math.sin(now / 100)})`; g.fillRect(t.c * TW + 3, FLOOR_Y + t.r * TW + 3, TW - 6, TW - 6);
+      g.strokeStyle = '#9fd0ff'; g.lineWidth = 2; g.strokeRect(t.c * TW + 3, FLOOR_Y + t.r * TW + 3, TW - 6, TW - 6);
+      osrsText(g, String(S.siphon.at - S.tick), tileX(t.c), tileY(t.r) + 6, '#ffffff', 18);
+    });
+  }
   // acid pools
   for (const k in S.pools) {
     const [c, r] = k.split(',').map(Number);
@@ -1440,11 +1657,11 @@ function draw(now) {
   // your spell on the mage hand
   S.casts.forEach(k => {
     const t = Math.min(1, (S.tick - k.t + interp) / 1.1);
-    const hp = handPos(k.side === undefined ? S.mageSide : k.side);
+    const hp = k.head ? { x: HEAD.x, y: HEAD.y + 30 } : handPos(k.side === undefined ? S.mageSide : k.side);
     const f = k.from || S.you;
     const x = px(f) + (hp.x - px(f)) * t, y = py(f) - 10 + (hp.y - py(f) + 10) * t;
-    g.fillStyle = f.you ? 'rgba(255,120,40,.35)' : 'rgba(120,170,255,.35)'; g.beginPath(); g.arc(x, y, 9, 0, 7); g.fill();
-    g.fillStyle = f.you ? '#ffd27a' : '#cfe0ff'; g.beginPath(); g.arc(x, y, 4, 0, 7); g.fill();
+    g.fillStyle = k.thrall ? 'rgba(170,110,255,.35)' : f.you ? 'rgba(255,120,40,.35)' : 'rgba(120,170,255,.35)'; g.beginPath(); g.arc(x, y, k.thrall ? 6 : 9, 0, 7); g.fill();
+    g.fillStyle = k.thrall ? '#d9c2ff' : f.you ? '#ffd27a' : '#cfe0ff'; g.beginPath(); g.arc(x, y, k.thrall ? 2.5 : 4, 0, 7); g.fill();
   });
 
   // swap portals
@@ -1499,10 +1716,10 @@ function drawOverlay(g) {
   const next = S.stepIdx % 4;
   const names = ['Basic 1', 'Null (head turns)', 'Basic 2', S.mode === 'prayer' ? 'Null' : 'SPECIAL'];
   const until = 4 - (S.tick % 4);
-  osrsText(g, `Olm · head ${S.facing === 1 ? 'MIDDLE' : S.facing === S.mageSide ? 'MAGE' : 'MELEE'}`, x + 8, y + 18, '#ff981f', 19, 'left');
+  osrsText(g, `Head: ${S.facing === 1 ? 'MID' : S.facing === S.mageSide ? 'MAGE' : 'MELEE'}`, x + 8, y + 18, '#ff981f', 19, 'left');
   osrsText(g, `Next: ${names[next]}`, x + 8, y + 38, next === 3 && S.mode !== 'prayer' ? '#ff4a3a' : '#ffffff', 19, 'left');
   osrsText(g, `In: ${until} tick${until > 1 ? 's' : ''}`, x + 8, y + 57, '#ffffff', 19, 'left');
-  if (S.mode !== 'prayer') osrsText(g, SPECIALS[S.specIdx % 3].name, x + w - 8, y + 18, '#c9c9c9', 16, 'right');
+  if (S.mode !== 'prayer') osrsText(g, S.headPhase ? 'Life Siphon' : specList()[S.specIdx % specList().length].name, x + w - 8, y + 18, '#c9c9c9', 16, 'right');
   for (let i = 0; i < 4; i++) {
     const on = i === (S.tick + 3) % 4;
     g.fillStyle = on ? '#ffff00' : '#3a352e';
@@ -1589,6 +1806,12 @@ function drawToa(g, color, x, y, ang, now) {
 }
 
 function drawHead(g, now) {
+  if (S.raid && S.transition) { osrsText(g, 'Olm is underground...', HEAD.x, HEAD.y + 20, '#ff981f', 22); return; }
+  if (S.raid && S.headPhase) {
+    g.fillStyle = '#0a0d0c'; g.fillRect(HEAD.x - 50, 4, 100, 8);
+    g.fillStyle = '#00ff00'; g.fillRect(HEAD.x - 50, 4, 100 * S.headHp / HEAD_HP, 8);
+    g.fillStyle = 'rgba(62,224,79,.18)'; g.beginPath(); g.arc(HEAD.x, HEAD.y, 80, 0, 7); g.fill();
+  } else if (S.raid && S.phase === 3) { g.fillStyle = 'rgba(62,224,79,.14)'; g.beginPath(); g.arc(HEAD.x, HEAD.y, 74, 0, 7); g.fill(); }
   const open = now < S.mouthUntil ? 1 : 0;
   g.save(); g.translate(HEAD.x, HEAD.y); g.rotate(S.headAngle);
   // neck/rock behind
@@ -1624,6 +1847,7 @@ function drawHead(g, now) {
 
 function drawHand(g, side) {
   const h = S.hands[side]; const p = handPos(side);
+  if (S.raid && (S.headPhase || S.transition)) return;
   const mirror = side === 2 ? -1 : 1;
   // rock housing
   g.fillStyle = '#1f3630'; g.beginPath(); g.ellipse(p.x, p.y - 44, 74, 40, 0, 0, 7); g.fill();
@@ -1662,10 +1886,13 @@ function drawHand(g, side) {
       g.fillStyle = '#7fe3d4'; g.beginPath(); g.moveTo(x, y - 12); g.lineTo(x + 8, y); g.lineTo(x, y + 12); g.lineTo(x - 8, y); g.closePath(); g.fill();
     } else if (S.icon.id === 'lightning') {
       g.fillStyle = '#ffe25a'; g.beginPath(); g.moveTo(x + 3, y - 13); g.lineTo(x - 7, y + 2); g.lineTo(x - 1, y + 2); g.lineTo(x - 4, y + 13); g.lineTo(x + 7, y - 3); g.lineTo(x + 1, y - 3); g.closePath(); g.fill();
+    } else if (S.icon.id === 'heal') {
+      g.fillStyle = '#3ee04f'; g.fillRect(x - 3, y - 11, 6, 22); g.fillRect(x - 11, y - 3, 22, 6);
     } else {
       g.strokeStyle = '#c58cff'; g.lineWidth = 3; g.beginPath(); for (let a = 0; a < 12; a += .3) { const r = a * 1.05; g.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); } g.stroke();
     }
   }
+  if (h.healUntil && S.tick < h.healUntil) osrsText(g, '∞', p.x + 40, p.y - 52, '#3ee04f', 30);
   if (S.wheels) osrsText(g, h.type === 'mage' ? 'Mage hand' : 'Melee hand', p.x, p.y - 76, h.type === 'mage' ? '#9fc4ff' : '#ff9a8e', 16);
 }
 
