@@ -237,6 +237,8 @@ footer { margin-top: 32px; border-top: 2px solid var(--stone-lo); padding-top: 1
         <select id="skipRow"><option value="1" selected>Row 1 (against the wall)</option><option value="3">Row 3 (WDR mage tank)</option></select></div>
       <div class="field"><label for="orbStyle">Prayer orbs look like</label>
         <select id="orbStyle"><option value="osrs">OSRS default</option><option value="toa">ToA prayer orbs (scimitar / arrow / blue orb)</option></select></div>
+      <div class="field"><label for="power">Phase power</label>
+        <select id="power"><option value="random" selected>Random</option><option value="acid">Acid</option><option value="flame">Flame</option><option value="crystal">Crystal</option><option value="all">All powers (2nd-to-last phase)</option><option value="none">None</option></select></div>
       <label class="check"><input type="checkbox" id="wheels" checked> Training wheels</label>
       <label class="check"><input type="checkbox" id="mirror"> Mirrored room</label>
       <div class="ctrl-btns">
@@ -336,6 +338,16 @@ footer { margin-top: 32px; border-top: 2px solid var(--stone-lo); padding-top: 1
       <span class="eyebrow">Plugins the guides use</span>
       <p><b>Chambers of Xeric Additions</b> (Buchus): Olm side highlight, claw HP overlay, phase panel, and a "Replace Olm Orbs" option. <b>Visual Metronome</b> set to a 4-tick cycle. <b>Tile Packs</b>: "CoX Olm standard" (the yellow tiles in the trainer).</p>
       <p class="src">Sources: <a href="https://www.youtube.com/watch?v=8Ta9VkVaJ7M" target="_blank" rel="noopener">Synq, The EASIEST Mage Skipping Guide (Duo Olm)</a> · <a href="https://www.youtube.com/watch?v=GzoqUGXDQFg" target="_blank" rel="noopener">Qevon, Mage Skip for Dummies</a> · <a href="https://www.youtube.com/watch?v=714IJM8Xjs0" target="_blank" rel="noopener">Daep, Melee &amp; Mage Skip guide</a> · <a href="https://oldschool.runescape.wiki/w/Chambers_of_Xeric/Strategies" target="_blank" rel="noopener">OSRS Wiki</a></p>
+    </div>
+
+    <div class="block">
+      <h2>Phase powers (they count as basics)</h2>
+      <p class="muted">Each standard phase Olm rises with one power. In the 2nd-to-last phase it uses all three. A phase attack replaces about 1 in 3 of Olm's normal attacks (1 in 2 with all powers), so keep counting it as a basic.</p>
+      <div class="grid3">
+        <div class="card stone"><span class="eyebrow">Acid</span><p><b>Acid spray:</b> green pools on the floor. Don't stand in them (3–6 damage a tick).</p><p><b>Acid drip:</b> the target leaves a pool on every tile they walk off. Don't drip over your route tiles or onto your teammate.</p></div>
+        <div class="card stone"><span class="eyebrow">Flame</span><p><b>"Burn with me!"</b>: the target burns for 5 every few ticks, and it spreads to anyone right next to them ("I will burn with you"). Keep a gap.</p><p><b>Fire wall:</b> two walls trap the target. Walk out the open end, or put it out with water. The centre tile under the head can't be fire-walled.</p></div>
+        <div class="card stone"><span class="eyebrow">Crystal</span><p><b>Falling crystals:</b> the target gets a red ring and crystals drop where they stand. Keep walking.</p><p><b>Crystal bombs:</b> they explode after a few seconds. Be 5+ tiles away (15 damage at 4 tiles, more the closer you are).</p></div>
+      </div>
     </div>
 
     <div class="block">
@@ -677,6 +689,8 @@ function makeState(running) {
     hands, mageSide, meleeSide: 2 - mageSide,
     proj: [], events: [], crystals: [], bolts: [], notices: [], splats: [], casts: [], puffs: [],
     icon: null, swapLink: null,
+    // phase power: Olm's phase attacks replace some basics (they still count as basics)
+    power: pickPower(), lastPhaseAtk: null, pools: {}, drip: null, burn: null, firewall: null, fall: null, fallMarks: [], bombs: [],
     stats: { skipped: 0, taken: 0, lost: 0, onMate: 0, recov: [], lostTaken: 0, pOk: 0, pBad: 0, sOk: 0, sBad: 0, sapped: 0, dmg: 0, react: [], ticks: 0 },
     react: null,
   };
@@ -738,10 +752,14 @@ function doTick() {
     for (let s = 0; s < 2; s++) {           // run: 2 tiles per tick, diagonals allowed
       const dc = Math.sign(p.tc - p.c), dr = Math.sign(p.tr - p.r);
       if (!dc && !dr) break;
-      p.c += dc; p.r += dr;
+      if (!blocked(p.c + dc, p.r + dr)) { p.c += dc; p.r += dr; }
+      else if (dc && !blocked(p.c + dc, p.r)) p.c += dc;
+      else if (dr && !blocked(p.c, p.r + dr)) p.r += dr;
+      else break;
     }
   }
   due.forEach(e => e.fn());
+  phaseTick();
   if (S.mode === 'recover') lostEvents();
   if (S.tick % 4 === 2) mageCast();
   if (S.tick % 4 === 1) meleeGuyHit();
@@ -898,12 +916,115 @@ function olmAct() {
   S.stepIdx++;
 }
 
+/* ---------- phase powers (Acid, Flame, Crystal) ---------- */
+const POWER_ATKS = { acid: ['spray', 'drip'], flame: ['burn', 'wall'], crystal: ['fall', 'bombs'] };
+const POWER_NAME = { acid: 'Acid', flame: 'Flame', crystal: 'Crystal', all: 'all its powers' };
+function pickPower() {
+  const v = $('#power').value;
+  return v === 'random' ? pick(['acid', 'flame', 'crystal']) : v;
+}
+const key = (c, r) => c + ',' + r;
+const cheb = (a, b) => Math.max(Math.abs(a.c - b.c), Math.abs(a.r - b.r));
+function blocked(c, r) {
+  if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return true;
+  const f = S.firewall;
+  return !!(f && S.tick < f.until && (c === f.c - 1 || c === f.c + 1) && r <= f.depth);
+}
+function phaseAttack() {
+  const list = S.power === 'all' ? [].concat(...Object.values(POWER_ATKS)) : POWER_ATKS[S.power];
+  // Olm tries not to repeat the attack it used last
+  const options = list.length > 1 ? list.filter(a => a !== S.lastPhaseAtk) : list;
+  const atk = pick(options); S.lastPhaseAtk = atk;
+  const t = pick(S.players);
+  const who = t.you ? 'you' : 'your melee guy';
+  if (atk === 'spray') {
+    const tiles = new Set([key(t.c, t.r)]);
+    while (tiles.size < 7) tiles.add(key(rand(0, COLS - 1), rand(0, 4)));
+    tiles.forEach(k => { S.pools[k] = S.tick + 24; });
+    notice('Acid spray! Stay off the green pools', 'bad', 1800);
+  } else if (atk === 'drip') {
+    S.drip = { target: t, until: S.tick + 12 };
+    notice(`Acid drip on ${who}: every tile walked on becomes a pool`, t.you ? 'bad' : 'info', 2200);
+  } else if (atk === 'burn') {
+    S.burn = { targets: [t], left: 6, next: S.tick + 2 };
+    t.say = { text: 'Burn with me!', until: performance.now() + 2000 };
+    notice(`Burn on ${who}: keep away from each other`, t.you ? 'bad' : 'info', 2200);
+  } else if (atk === 'wall') {
+    if (t.c === 7 && t.r === 0) { chat('The fire wall fizzles: nobody gets trapped on the centre tile.', 'olm'); return; }
+    S.firewall = { c: Math.max(1, Math.min(COLS - 2, t.c)), depth: 3, until: S.tick + 9, target: t };
+    notice(`Fire wall on ${who}! Walk out the open end`, t.you ? 'bad' : 'info', 2200);
+  } else if (atk === 'fall') {
+    S.fall = { target: t, left: 11 };
+    notice(`Crystals falling on ${who}: keep moving`, t.you ? 'bad' : 'info', 2200);
+  } else if (atk === 'bombs') {
+    for (let i = 0; i < 2; i++) {
+      const b = { c: Math.max(0, Math.min(COLS - 1, t.c + rand(-3, 3))), r: rand(0, 3), boom: S.tick + 8 };
+      S.bombs.push(b);
+    }
+    notice('Crystal bombs! Get 5+ tiles away', 'bad', 2000);
+  }
+}
+function phaseTick() {
+  const you = S.you;
+  // acid pools: 3-6 a tick while you stand in one
+  for (const k in S.pools) if (S.pools[k] <= S.tick) delete S.pools[k];
+  if (S.pools[key(you.c, you.r)]) { hurt(rand(3, 6)); if (S.tick % 3 === 0) chat('You are standing in acid!', 'bad'); }
+  // acid drip: the target leaves a pool on every tile it walks off
+  if (S.drip) {
+    const t = S.drip.target;
+    if (t.pc !== t.c || t.pr !== t.r) S.pools[key(t.pc, t.pr)] = S.tick + 20;
+    if (S.tick >= S.drip.until) S.drip = null;
+  }
+  // deep burn: 5 damage every 4 ticks, spreads to anyone standing next to a burning player
+  if (S.burn && S.tick >= S.burn.next) {
+    S.burn.next = S.tick + 4; S.burn.left--;
+    S.players.forEach(o => {
+      if (!S.burn.targets.includes(o) && S.burn.targets.some(b => cheb(b, o) <= 1)) {
+        S.burn.targets.push(o); o.say = { text: 'I will burn with you!', until: performance.now() + 2000 };
+        chat(`The burn spread to ${o.you ? 'you' : 'your melee guy'}: stand further apart.`, 'bad');
+      }
+    });
+    if (S.burn.targets.includes(you)) hurt(5);
+    if (S.burn.left <= 0) S.burn = null;
+  }
+  // fire wall: whoever is still in the gap when it ends takes a big hit
+  const f = S.firewall;
+  if (f && S.tick >= f.until) {
+    if (you.c === f.c && you.r <= f.depth) { hurt(rand(50, 65)); notice('Burned in the fire wall!', 'bad'); }
+    S.firewall = null;
+  }
+  // falling crystals follow the target: one lands 2 ticks after it marks the tile
+  if (S.fall && S.fall.left > 0) {
+    const t = S.fall.target;
+    S.fallMarks.push({ c: t.c, r: t.r, land: S.tick + 2 });
+    if (--S.fall.left <= 0) S.fall = null;
+  }
+  S.fallMarks = S.fallMarks.filter(m => {
+    if (m.land > S.tick) return true;
+    S.puffs.push({ x: tileX(m.c), y: tileY(m.r), col: '#9ff0e2', born: performance.now() });
+    if (you.c === m.c && you.r === m.r) hurt(rand(15, 20));
+    return false;
+  });
+  // crystal bombs: 15 damage at 4 tiles, +15 for every tile closer
+  S.bombs = S.bombs.filter(b => {
+    if (b.boom > S.tick) return true;
+    S.puffs.push({ x: tileX(b.c), y: tileY(b.r), col: '#7fe3d4', born: performance.now(), big: true });
+    const d = cheb(b, you);
+    if (d <= 4) { hurt(15 + 15 * (4 - d)); notice('Caught by a crystal bomb', 'bad', 1500); }
+    return false;
+  });
+}
+
 function targetsInView() { return S.players.filter(p => sees(S.facing, p.c)); }
 
 function standardAttack(isCatchUp) {
   const targets = targetsInView();
   if (!targets.length) return;
   S.mouthUntil = performance.now() + 450;
+  if (!isCatchUp && S.power !== 'none' && S.mode !== 'prayer' && !S.opening && Math.random() < (S.power === 'all' ? .5 : 1 / 3)) {
+    phaseAttack();
+    return;
+  }
   const sphereChance = S.mode === 'prayer' ? .25 : S.mode === 'full' ? .15 : 0;
   if (!isCatchUp && Math.random() < sphereChance) {
     const t = targets.includes(S.you) && Math.random() < .75 ? S.you : pick(targets);
@@ -1021,6 +1142,7 @@ function startRun() {
   $('#ov').hidden = true;
   $('#pauseBtn').textContent = 'Pause';
   chatEl.innerHTML = '';
+  if (S.power !== 'none' && S.mode !== 'prayer') { chat(`The Great Olm rises with the power of ${POWER_NAME[S.power]}!`, 'olm'); notice(`Olm rises with the power of ${POWER_NAME[S.power]}`, 'info', 2400); }
   chat(S.mode === 'prayer' ? 'Pray against every attack. Prayer orbs: switch after launch.' : S.mode === 'recover' ? 'The skip is running. Keep it going until something breaks it, then recover.' : 'Phase start: spec the melee hand until it cripples, then go LEFT and set the head.', 'coach');
   updateHUD();
 }
@@ -1071,11 +1193,27 @@ function endRun(died) {
 }
 
 /* ---- coaching (training wheels) ---- */
+function phaseCoach() {
+  const you = S.you, f = S.firewall;
+  if (f && S.tick < f.until && you.c === f.c && you.r <= f.depth) return { text: 'FIRE WALL! Walk out the open end', target: { c: you.c, r: f.depth + 1 }, hot: true };
+  const bomb = S.bombs.find(b => cheb(b, you) <= 4);
+  if (bomb) {
+    const away = { c: bomb.c <= 7 ? Math.min(COLS - 1, bomb.c + 5) : Math.max(0, bomb.c - 5), r: you.r };
+    return { text: 'Crystal bomb: get 5 tiles away!', target: away, hot: true };
+  }
+  if (S.pools[key(you.c, you.r)]) return { text: 'Get off the acid!', target: null, hot: true };
+  if (S.fall && S.fall.target === you) return { text: 'Crystals falling on you: keep walking', target: null, hot: true };
+  if (S.burn && S.burn.targets.includes(you) && cheb(you, S.mate) <= 1) return { text: 'You\'re burning: step away from your melee guy', target: null, hot: true };
+  return null;
+}
+
 function coach() {
   if (S.running && !S.over && !S.wheels && S.lost && !S.lostSide) return { text: 'LOST! Find your count again', target: null };
   if (!S.running || S.over || !S.wheels || S.mode === 'prayer') return null;
   if (S.tick < S.portalUntil) return { text: 'SWAP! Meet at the THUMB tile', target: S.thumb, hot: true };
   if (S.opening) return { text: 'Phase start: everyone spec the MELEE hand', target: null };
+  const ph = phaseCoach();
+  if (ph) return ph;
   if (S.lost) {
     if (!S.lostSide) return { text: 'LOST! Watch where the next special lands', target: null };
     return S.lostSide === 'melee'
@@ -1227,6 +1365,46 @@ function draw(now) {
     g.strokeStyle = '#ffff00'; g.lineWidth = 3;
     g.beginPath(); g.moveTo(x - k, y - k); g.lineTo(x + k, y + k); g.moveTo(x + k, y - k); g.lineTo(x - k, y + k); g.stroke();
   }
+
+  // acid pools
+  for (const k in S.pools) {
+    const [c, r] = k.split(',').map(Number);
+    g.fillStyle = 'rgba(120,220,40,.38)'; g.fillRect(c * TW + 3, FLOOR_Y + r * TW + 3, TW - 6, TW - 6);
+    g.fillStyle = 'rgba(200,255,120,.7)';
+    for (let i = 0; i < 3; i++) { const bx = c * TW + 10 + ((i * 13 + (now / 90 | 0)) % (TW - 20)), by = FLOOR_Y + r * TW + 12 + i * 10; g.beginPath(); g.arc(bx, by, 2.5, 0, 7); g.fill(); }
+  }
+  // fire wall
+  if (S.firewall) {
+    const f = S.firewall;
+    [f.c - 1, f.c + 1].forEach(c => {
+      for (let r = 0; r <= f.depth; r++) {
+        const x = c * TW, y = FLOOR_Y + r * TW;
+        g.fillStyle = 'rgba(255,90,20,.45)'; g.fillRect(x + 2, y + 2, TW - 4, TW - 4);
+        for (let i = 0; i < 3; i++) {
+          const fx = x + 10 + i * 14, h = 18 + 8 * Math.sin(now / 80 + i + r);
+          g.fillStyle = i % 2 ? '#ffd23a' : '#ff6a1a';
+          g.beginPath(); g.moveTo(fx - 6, y + TW - 6); g.quadraticCurveTo(fx, y + TW - 6 - h * 1.4, fx + 6, y + TW - 6); g.closePath(); g.fill();
+        }
+      }
+    });
+  }
+  // falling crystal shadows + the crystal dropping in
+  S.fallMarks.forEach(m => {
+    const x = tileX(m.c), y = tileY(m.r);
+    const u = Math.min(1, 1 - (m.land - S.tick - interp) / 2);
+    g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.ellipse(x, y + 10, 8 + u * 8, 4 + u * 3, 0, 0, 7); g.fill();
+    const cy = y - 70 * (1 - u);
+    g.fillStyle = '#9ff0e2'; g.beginPath(); g.moveTo(x, cy - 14); g.lineTo(x + 6, cy); g.lineTo(x, cy + 10); g.lineTo(x - 6, cy); g.closePath(); g.fill();
+  });
+  // crystal bombs with a fuse count and their 4-tile blast area
+  S.bombs.forEach(b => {
+    const x = tileX(b.c), y = tileY(b.r), left = b.boom - S.tick;
+    g.strokeStyle = 'rgba(127,227,212,.35)'; g.lineWidth = 1; g.setLineDash([4, 4]);
+    g.strokeRect((b.c - 4) * TW, FLOOR_Y + (b.r - 4) * TW, 9 * TW, 9 * TW); g.setLineDash([]);
+    g.fillStyle = '#4fb8a8'; g.beginPath(); g.moveTo(x, y - 16); g.lineTo(x + 11, y); g.lineTo(x, y + 14); g.lineTo(x - 11, y); g.closePath(); g.fill();
+    g.strokeStyle = left <= 2 && Math.sin(now / 60) > 0 ? '#ff4a3a' : '#c8fff4'; g.lineWidth = 2; g.stroke();
+    osrsText(g, String(left), x, y + 5, '#ffffff', 18);
+  });
 
   // lightning
   S.bolts.forEach(b => {
@@ -1493,6 +1671,12 @@ function drawHand(g, side) {
 
 function drawPlayer(g, p, now) {
   const x = px(p), y = py(p);
+  // phase-power auras: red target ring for falling crystals, flames for burn, drips for acid
+  if (S.fall && S.fall.target === p) { g.strokeStyle = '#ff3b30'; g.lineWidth = 3; g.beginPath(); g.arc(x, y, 20 + 2 * Math.sin(now / 90), 0, 7); g.stroke(); }
+  if (S.burn && S.burn.targets.includes(p)) {
+    for (let i = 0; i < 4; i++) { const a = now / 120 + i * 1.6; g.fillStyle = i % 2 ? '#ffd23a' : '#ff6a1a'; g.beginPath(); g.arc(x + Math.cos(a) * 12, y - 6 + Math.sin(a) * 8 - (now / 40 + i * 9) % 14, 3.5, 0, 7); g.fill(); }
+  }
+  if (S.drip && S.drip.target === p) { g.fillStyle = '#9be03a'; for (let i = 0; i < 3; i++) { g.beginPath(); g.arc(x - 8 + i * 8, y + 4 + (now / 50 + i * 7) % 12, 2.5, 0, 7); g.fill(); } }
   // true tile
   if (p.you) { g.strokeStyle = '#00ffff'; g.lineWidth = 1.5; g.strokeRect(p.c * TW + 4, FLOOR_Y + p.r * TW + 4, TW - 8, TW - 8); }
   g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.ellipse(x, y + 12, 12, 5, 0, 0, 7); g.fill();
@@ -1538,7 +1722,7 @@ $('#pauseBtn').addEventListener('click', () => togglePause());
 $('#endBtn').addEventListener('click', () => endRun(false));
 $('#wheels').addEventListener('change', e => { S.wheels = e.target.checked; });
 $('#orbStyle').addEventListener('change', e => setLook(e.target.value));
-['#mirror', '#skipRow', '#route', '#mode'].forEach(id => $(id).addEventListener('change', () => { if (!S.running || S.over) S = makeState(false); }));
+['#mirror', '#skipRow', '#route', '#mode', '#power'].forEach(id => $(id).addEventListener('change', () => { if (!S.running || S.over) S = makeState(false); }));
 $$('.pray-btn').forEach(b => b.addEventListener('click', () => setPrayer(b.dataset.p)));
 $('#eatBtn').addEventListener('click', eat);
 $('#restoreBtn').addEventListener('click', restore);
