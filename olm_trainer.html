@@ -139,6 +139,14 @@ select { font-family: var(--font-body); font-size: .98rem; background: var(--sto
 .statgrid b { font-family: var(--font-num); font-weight: 400; font-size: 1.2rem; color: var(--yellow); text-align: right; font-variant-numeric: tabular-nums; }
 .keys { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .9rem; color: var(--muted); padding: 2px 4px; }
 
+/* "what to do now" box */
+.nowbox { padding: 10px 14px; display: grid; gap: 4px; border-left: 6px solid var(--yellow); }
+.now-step { font-family: var(--font-num); font-size: 1.2rem; color: var(--muted); }
+.now-do { font-family: var(--font-ui); font-size: 1.35rem; line-height: 1.25; color: var(--yellow); text-shadow: 1px 1px 0 #000; }
+.now-do.hot { color: #3ee04f; }
+.now-why { font-size: .98rem; color: var(--fg); max-width: 75ch; }
+.now-why b { color: var(--orange); }
+
 /* order tracker */
 .tracker { padding: 10px 12px; display: grid; gap: 8px; }
 .trk-row { display: grid; grid-template-columns: 120px 1fr; gap: 10px; align-items: center; }
@@ -263,6 +271,12 @@ footer { margin-top: 32px; border-top: 2px solid var(--stone-lo); padding-top: 1
           <button class="btn primary" id="ovStart">Start</button>
         </div>
       </div>
+    </div>
+
+    <div class="nowbox stone" id="nowBox">
+      <div class="now-step" id="nowStep">Press Start (or Space) to begin.</div>
+      <div class="now-do" id="nowDo">You'll see one instruction here at a time.</div>
+      <div class="now-why" id="nowWhy">Each step also says why, so the routine makes sense.</div>
     </div>
 
     <div class="tracker stone" id="tracker">
@@ -643,47 +657,66 @@ scene.width = W; scene.height = H;
 (function paintScene() {
   const g = scene.getContext('2d');
   const R = seeded(1337);
-  // cave wall
-  const wall = g.createLinearGradient(0, 0, 0, FLOOR_Y);
-  wall.addColorStop(0, '#0d1a17'); wall.addColorStop(1, '#1d3a33');
-  g.fillStyle = wall; g.fillRect(0, 0, W, FLOOR_Y);
-  for (let i = 0; i < 70; i++) {
-    g.fillStyle = `rgba(${40 + R() * 30},${80 + R() * 40},${70 + R() * 30},${.15 + R() * .25})`;
-    g.beginPath(); g.ellipse(R() * W, R() * FLOOR_Y, 20 + R() * 60, 10 + R() * 30, R() * 3, 0, 7); g.fill();
+  const P = (pts, col) => { g.fillStyle = col; g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath(); g.fill(); };
+  // faceted low-poly cave wall: a jittered grid split into triangles
+  const cols = 18, rows = 5, cw = W / cols, rh = (FLOOR_Y - 18) / rows;
+  const pts = [];
+  for (let r = 0; r <= rows; r++) {
+    pts.push([]);
+    for (let c = 0; c <= cols; c++) {
+      const jx = c && c < cols ? (R() - .5) * cw * .7 : 0, jy = r && r < rows ? (R() - .5) * rh * .7 : 0;
+      pts[r].push([c * cw + jx, r * rh + jy]);
+    }
   }
-  // lime crystal clusters on the wall
-  for (let k = 0; k < 16; k++) {
-    const cx = R() * W, cy = 12 + R() * 90;
-    for (let j = 0; j < 4; j++) {
-      const x = cx + (R() - .5) * 26, h = 14 + R() * 22, w = 4 + R() * 4, a = (R() - .5) * .9;
+  const rock = base => { const v = base + R() * 16; return `rgb(${v * .5 | 0},${v * 1.02 | 0},${v * .88 | 0})`; };
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const a = pts[r][c], b = pts[r][c + 1], d = pts[r + 1][c + 1], e = pts[r + 1][c];
+    P([a, b, d], rock(18 + r * 7)); P([a, d, e], rock(12 + r * 7));
+  }
+  // lime crystal clusters with a soft glow
+  for (let k = 0; k < 15; k++) {
+    const cx = 20 + R() * (W - 40), cy = 18 + R() * 92;
+    const gl = g.createRadialGradient(cx, cy, 0, cx, cy, 34);
+    gl.addColorStop(0, 'rgba(180,240,80,.22)'); gl.addColorStop(1, 'rgba(180,240,80,0)');
+    g.fillStyle = gl; g.beginPath(); g.arc(cx, cy, 34, 0, 7); g.fill();
+    const n = 3 + (R() * 3 | 0);
+    for (let j = 0; j < n; j++) {
+      const x = cx + (R() - .5) * 26, h = 12 + R() * 24, w = 3 + R() * 4, a = (R() - .5) * 1.1;
       g.save(); g.translate(x, cy + 14); g.rotate(a);
-      g.fillStyle = '#a6d93a'; g.beginPath(); g.moveTo(-w, 0); g.lineTo(0, -h); g.lineTo(w, 0); g.closePath(); g.fill();
-      g.fillStyle = '#6f9e1f'; g.beginPath(); g.moveTo(0, 0); g.lineTo(0, -h); g.lineTo(w, 0); g.closePath(); g.fill();
+      P([[-w, 0], [0, -h], [0, 2]], '#c4ec5a'); P([[0, 2], [0, -h], [w, 0]], '#7fae2a');
       g.restore();
     }
   }
-  // stone ledge where the claws rest
-  g.fillStyle = '#4e5a52'; g.fillRect(0, FLOOR_Y - 22, W, 22);
-  for (let i = 0; i < 260; i++) {
-    g.fillStyle = `rgba(${150 + R() * 60},${160 + R() * 50},${150 + R() * 50},${.25 + R() * .4})`;
-    g.beginPath(); g.arc(R() * W, FLOOR_Y - 22 + R() * 22, 1 + R() * 2.4, 0, 7); g.fill();
+  // stone ledge where the claws rest: grey cobbles
+  P([[0, FLOOR_Y - 24], [W, FLOOR_Y - 24], [W, FLOOR_Y], [0, FLOOR_Y]], '#4e5b54');
+  for (let i = 0; i < 230; i++) {
+    const x = R() * W, y = FLOOR_Y - 24 + R() * 24, s = 2 + R() * 4, v = 120 + R() * 70;
+    P([[x - s, y], [x - s * .4, y - s * .8], [x + s * .6, y - s * .6], [x + s, y + s * .3], [x, y + s * .8]], `rgb(${v * .92 | 0},${v | 0},${v * .95 | 0})`);
   }
-  // floor
-  g.fillStyle = '#243a2d'; g.fillRect(0, FLOOR_Y, W, H - FLOOR_Y);
-  for (let i = 0; i < 1400; i++) {
-    const d = R();
-    g.fillStyle = d < .5 ? `rgba(10,20,14,${.25 + R() * .35})` : `rgba(70,95,78,${.15 + R() * .25})`;
-    g.beginPath(); g.arc(R() * W, FLOOR_Y + R() * (H - FLOOR_Y), .8 + R() * 2.2, 0, 7); g.fill();
+  // floor: flat-coloured terrain tiles like the game, a little lighter near the ledge
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    const v = (R() - .5) * 10 - r * 1.5;
+    g.fillStyle = `rgb(${32 + v | 0},${54 + v | 0},${40 + v | 0})`;
+    g.fillRect(c * TW, FLOOR_Y + r * TW, TW, TW);
   }
-  // pale cobble band next to the ledge (like the real room)
-  for (let i = 0; i < 300; i++) {
-    g.fillStyle = `rgba(150,165,155,${.08 + R() * .2})`;
-    g.beginPath(); g.arc(R() * W, FLOOR_Y + R() * 26, 1 + R() * 2.5, 0, 7); g.fill();
+  for (let i = 0; i < 900; i++) {
+    const x = R() * W, y = FLOOR_Y + R() * (H - FLOOR_Y), s = .8 + R() * 2;
+    g.fillStyle = R() < .6 ? `rgba(12,22,15,${.3 + R() * .35})` : `rgba(80,104,86,${.18 + R() * .25})`;
+    g.fillRect(x, y, s, s);
+  }
+  // pale gravel band next to the ledge (as in the real room)
+  for (let i = 0; i < 320; i++) {
+    const x = R() * W, y = FLOOR_Y + Math.pow(R(), 2) * 30, s = 1.5 + R() * 2.5, v = 130 + R() * 50;
+    P([[x - s, y], [x, y - s * .7], [x + s, y], [x, y + s * .7]], `rgba(${v | 0},${v + 10 | 0},${v | 0},${.35 + R() * .3})`);
   }
   // faint tile grid
-  g.strokeStyle = 'rgba(0,0,0,.18)'; g.lineWidth = 1;
+  g.strokeStyle = 'rgba(0,0,0,.16)'; g.lineWidth = 1;
   for (let c = 0; c <= COLS; c++) { g.beginPath(); g.moveTo(c * TW + .5, FLOOR_Y); g.lineTo(c * TW + .5, H); g.stroke(); }
   for (let r = 0; r <= ROWS; r++) { g.beginPath(); g.moveTo(0, FLOOR_Y + r * TW + .5); g.lineTo(W, FLOOR_Y + r * TW + .5); g.stroke(); }
+  // vignette
+  const vg = g.createRadialGradient(W / 2, H * .55, H * .25, W / 2, H * .55, W * .72);
+  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.5)');
+  g.fillStyle = vg; g.fillRect(0, 0, W, H);
 })();
 
 let S = null;
@@ -1394,7 +1427,14 @@ function togglePause(force) {
   const to = force === true ? true : !S.paused;
   if (to === S.paused) return;
   S.paused = to;
-  if (to) S.pauseAt = now; else { S.lastTickAt += now - S.pauseAt; if (S.react) S.react.t += now - S.pauseAt; }
+  if (to) S.pauseAt = now;
+  else {
+    const gap = now - S.pauseAt;   // everything on a real-time timer waits while paused
+    S.lastTickAt += gap;
+    if (S.react) S.react.t += gap;
+    S.notices.forEach(n => { n.until += gap; });
+    S.splats.forEach(s => { s.until += gap; s.born += gap; });
+  }
   $('#pauseBtn').textContent = S.paused ? 'Resume' : 'Pause';
 }
 function summaryHTML(died) {
@@ -1505,8 +1545,56 @@ function coachRaw() {
   return { text: next === 0 ? 'Basic 1 goes to your melee guy' : 'Null next: head swings back to the mage hand side', target: null };
 }
 
+/* ---- "What to do now": one instruction and the reason for it ---- */
+function nowInfo() {
+  if (!S.running) return null;
+  if (S.over) return { do: S.won ? 'Olm is dead. Nice!' : 'Run over. Press Space or Start to go again.', why: 'Your results are in the summary on the game screen.' };
+  if (S.mode === 'prayer') return { do: 'Switch prayer for each attack as it flies at you.', why: `${look.magic.name} = MAGE, ${look.ranged.name.toLowerCase()} = RANGE. For prayer orbs, switch only after they launch.` };
+  const at = t => S.you.c === t.c && S.you.r === t.r;
+  const next = S.stepIdx % 4, headOnYou = S.facing === S.mageSide;
+  if (S.raid && S.transition) return { do: 'Keep moving. Crystals are falling on you.', why: 'Olm is underground between phases. It will rise on the other wall with a new power.' };
+  if (S.raid && S.headPhase) {
+    if (S.siphon) return { do: 'Stand on a blue tile.', hot: true, why: 'Life Siphon: if you are not on a blue tile when the head next attacks, it hits you and heals Olm 5x that.' };
+    return { do: 'Shoot the head from the 3rd row and keep walking out of crystals.', why: 'The head phase has no claws and no Crystal Burst, Lightning or Swap. Crystals drop by the head and one follows you.' };
+  }
+  if (S.tick < S.portalUntil) return { do: 'Walk to the THUMB tile now.', hot: true, why: 'Swap teleports you into your partner\'s spot. The further apart you are, the more it hurts, so meet at the thumb.' };
+  const ph = phaseCoach();
+  if (ph) return { do: ph.text, hot: true, why: 'Dodge the phase attack first, then go back to the route.' };
+  if (S.opening) return { do: 'Wait: you and your melee guy are speccing the melee hand.', why: 'Once the melee hand is crippled, Olm cannot do specials. That gives you time to set the head.' };
+  if (S.crippled && !S.reachedLeft) return { do: 'Walk to the LEFT tile (L).', hot: true, why: 'Olm has to see you on the mage side so its head comes to you on the null.' };
+  if (S.lost) return { do: 'Watch where the next special lands.', why: 'Its side tells you how to re-set: melee side, go LEFT and run the route; your side, count from it.' };
+  if (S.raid && S.hands[S.mageSide].down && !S.hands[S.meleeSide].down) return { do: 'Help kill the melee hand.', why: 'With the mage hand dead, Olm\'s head follows the melee hand, so specials can\'t be skipped. Kill it fast.' };
+  if (next === 3) return at(S.right)
+    ? { do: 'Stay on the RIGHT tile (R).', why: 'Olm is looking at the mage side and nobody is there, so it turns and the special is wasted.' }
+    : { do: 'Step RIGHT now (tile R).', hot: true, why: 'The special is next. If Olm still sees you on the mage side, the special happens.' };
+  if (next === 2) {
+    if (!headOnYou) return { do: 'Wait on the LEFT tile.', why: 'The head is not on your side yet. On the null it swings to the claw you are hitting, the mage hand.' };
+    return at(S.mid)
+      ? { do: 'Stay on MIDDLE and take Basic 2.', why: 'Olm must use Basic 2 on you. If you leave now, it loses a basic instead of the special.' }
+      : { do: 'Go to the MIDDLE tile (MID).', hot: true, why: 'Basic 2 is next and you are the one who takes it.' };
+  }
+  if (next === 1) return { do: at(S.home) ? 'Wait on the LEFT tile.' : 'Go back LEFT (tile L).', why: 'Next is the null: Olm does not attack, its head swings toward the mage hand you are hitting.' };
+  return at(S.home)
+    ? { do: 'Wait on the LEFT tile. Basic 1 goes to your melee guy.', why: 'Olm is looking at the melee side right now, so Basic 1 is his.' }
+    : { do: 'Go back LEFT (tile L).', hot: true, why: 'The special was skipped and the head turned to the melee side. Get back to the mage side.' };
+}
+function renderNow() {
+  const n = nowInfo();
+  const names = ['Basic 1', 'the null', 'Basic 2', S.headPhase ? 'nothing (no specials)' : 'the special'];
+  const until = 4 - (S.tick % 4);
+  $('#nowStep').textContent = !S.running ? 'Press Start (or Space) to begin.'
+    : S.over ? 'Run finished'
+    : (S.wheels && S.mode !== 'set' && !S.lost) ? `Next Olm action: ${names[S.stepIdx % 4]} in ${until} tick${until > 1 ? 's' : ''}` : 'Count it yourself (no counter in this drill)';
+  if (!n) return;
+  const doEl = $('#nowDo');
+  doEl.textContent = flipLR(n.do);
+  doEl.classList.toggle('hot', !!n.hot);
+  $('#nowWhy').innerHTML = '<b>Why:</b> ' + flipLR(n.why);
+}
+
 /* ---- HUD ---- */
 function updateHUD() {
+  renderNow();
   $('#hpTxt').textContent = S.hp; $('#hpFill').style.height = S.hp / 99 * 100 + '%';
   $('#ppTxt').textContent = S.pp; $('#ppFill').style.height = S.pp / 99 * 100 + '%';
   const col = v => v > 66 ? 'var(--good)' : v > 33 ? 'var(--yellow)' : 'var(--bad)';
@@ -1753,12 +1841,17 @@ function draw(now) {
   });
 
   // hitsplats
-  S.splats = S.splats.filter(s => s.until > now);
+  if (!S.paused) S.splats = S.splats.filter(s => s.until > now);
   S.splats.forEach(s => drawHitsplat(g, s, now));
 
   // RuneLite-style overlay (training wheels)
   if (S.running && S.wheels && S.mode !== 'set' && !S.lost) drawOverlay(g);
 
+  // paused: dim the room, but keep the messages readable on top
+  if (S.paused && !S.over) {
+    g.fillStyle = 'rgba(8,6,4,.42)'; g.fillRect(0, 0, W, H);
+    osrsText(g, 'PAUSED · Space to resume', W / 2, H - 40, '#ff981f', 28);
+  }
   // coach line (yellow overhead-style text)
   if (co) {
     const size = co.hot ? 34 : 24;
@@ -1766,7 +1859,7 @@ function draw(now) {
     osrsText(g, co.text, W / 2, FLOOR_Y + 175, col, size);
   }
   // notices
-  S.notices = S.notices.filter(n => n.until > now);
+  if (!S.paused) S.notices = S.notices.filter(n => n.until > now);
   let ny = FLOOR_Y + 240;
   S.notices.forEach(n => {
     const size = n.big ? 26 : 21;
@@ -1780,14 +1873,10 @@ function draw(now) {
     ny += 6;
   });
 
-  if (S.paused && !S.over) {
-    g.fillStyle = 'rgba(8,6,4,.55)'; g.fillRect(0, 0, W, H);
-    osrsText(g, 'PAUSED · press Space', W / 2, H / 2, '#ff981f', 42);
-  }
 }
 
 function drawOverlay(g) {
-  const x = 8, y = 8, w = 182, h = 74;
+  const x = 8, y = H - 108, w = 182, h = 74;   // bottom-left of the floor, clear of the claws
   g.fillStyle = 'rgba(30,27,23,.82)'; g.fillRect(x, y, w, h);
   g.strokeStyle = 'rgba(90,80,64,.9)'; g.lineWidth = 1; g.strokeRect(x + .5, y + .5, w - 1, h - 1);
   const next = S.stepIdx % 4;
@@ -1882,43 +1971,89 @@ function drawToa(g, color, x, y, ang, now) {
   }
 }
 
+/* ---- low-poly drawing helpers (OSRS models are flat-shaded polygons) ---- */
+function poly(g, pts, col) {
+  g.fillStyle = col; g.beginPath();
+  pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+  g.closePath(); g.fill();
+}
+// a limb segment from (x1,y1) to (x2,y2): lit face + shaded face
+function limb(g, x1, y1, x2, y2, w1, w2, lit, dark) {
+  const a = Math.atan2(y2 - y1, x2 - x1), nx = -Math.sin(a), ny = Math.cos(a);
+  poly(g, [[x1 + nx * w1, y1 + ny * w1], [x2 + nx * w2, y2 + ny * w2], [x2, y2], [x1, y1]], lit);
+  poly(g, [[x1, y1], [x2, y2], [x2 - nx * w2, y2 - ny * w2], [x1 - nx * w1, y1 - ny * w1]], dark);
+}
+// a two-tone crystal shard
+function shard(g, x, y, h, w, ang, lit = '#c4ec5a', dark = '#7fae2a') {
+  g.save(); g.translate(x, y); g.rotate(ang);
+  poly(g, [[-w, 0], [0, -h], [0, 2]], lit);
+  poly(g, [[0, 2], [0, -h], [w, 0]], dark);
+  g.restore();
+}
+
 function drawHead(g, now) {
   if (S.raid && S.transition) { osrsText(g, 'Olm is underground...', HEAD.x, HEAD.y + 20, '#ff981f', 22); return; }
   if (S.raid && S.headPhase) {
     g.fillStyle = '#0a0d0c'; g.fillRect(HEAD.x - 50, 4, 100, 8);
     g.fillStyle = '#00ff00'; g.fillRect(HEAD.x - 50, 4, 100 * S.headHp / HEAD_HP, 8);
-    g.fillStyle = 'rgba(62,224,79,.18)'; g.beginPath(); g.arc(HEAD.x, HEAD.y, 80, 0, 7); g.fill();
-  } else if (S.raid && S.phase === 3) { g.fillStyle = 'rgba(62,224,79,.14)'; g.beginPath(); g.arc(HEAD.x, HEAD.y, 74, 0, 7); g.fill(); }
+  }
+  const glowGreen = S.raid && (S.phase === 3 || S.headPhase);
+  if (glowGreen) {
+    const gl = g.createRadialGradient(HEAD.x, HEAD.y, 20, HEAD.x, HEAD.y, 95);
+    gl.addColorStop(0, 'rgba(90,255,90,.32)'); gl.addColorStop(1, 'rgba(90,255,90,0)');
+    g.fillStyle = gl; g.beginPath(); g.arc(HEAD.x, HEAD.y, 95, 0, 7); g.fill();
+  }
   const open = now < S.mouthUntil ? 1 : 0;
   g.save(); g.translate(HEAD.x, HEAD.y); g.rotate(S.headAngle);
-  // neck/rock behind
-  g.fillStyle = '#20352f'; g.beginPath(); g.ellipse(0, -18, 78, 46, 0, 0, 7); g.fill();
-  // horns
-  g.fillStyle = '#2e2b24';
-  g.beginPath(); g.moveTo(-24, -26); g.bezierCurveTo(-60, -50, -66, -80, -40, -96); g.bezierCurveTo(-48, -70, -36, -50, -10, -34); g.closePath(); g.fill();
-  g.beginPath(); g.moveTo(24, -26); g.bezierCurveTo(60, -50, 66, -80, 40, -96); g.bezierCurveTo(48, -70, 36, -50, 10, -34); g.closePath(); g.fill();
-  // skull
-  const sk = g.createLinearGradient(0, -40, 0, 60);
-  sk.addColorStop(0, '#f1f3ea'); sk.addColorStop(1, '#b8c2ad');
-  g.fillStyle = sk; g.strokeStyle = '#6f7d60'; g.lineWidth = 2;
-  g.beginPath(); g.moveTo(-38, -30); g.quadraticCurveTo(0, -52, 38, -30); g.lineTo(26, 30); g.quadraticCurveTo(0, 44, -26, 30); g.closePath(); g.fill(); g.stroke();
-  // lime crystal plates on the skull
-  g.fillStyle = '#a6d93a';
-  g.beginPath(); g.moveTo(-10, -36); g.lineTo(0, -20); g.lineTo(10, -36); g.lineTo(0, -44); g.closePath(); g.fill();
-  g.fillStyle = '#8fc22a';
-  g.beginPath(); g.moveTo(-6, -14); g.lineTo(6, -14); g.lineTo(3, 18); g.lineTo(-3, 18); g.closePath(); g.fill();
-  // eyes
-  g.fillStyle = '#1d2a12'; g.beginPath(); g.ellipse(-20, -6, 9, 6, .45, 0, 7); g.fill(); g.beginPath(); g.ellipse(20, -6, 9, 6, -.45, 0, 7); g.fill();
-  g.fillStyle = '#d8ff6a'; g.beginPath(); g.ellipse(-20, -6, 4, 2.5, .45, 0, 7); g.fill(); g.beginPath(); g.ellipse(20, -6, 4, 2.5, -.45, 0, 7); g.fill();
-  // jaw
-  g.fillStyle = '#c9d0bd'; g.strokeStyle = '#6f7d60';
-  g.beginPath(); g.moveTo(-20, 26); g.lineTo(-14, 52 + open * 12); g.lineTo(14, 52 + open * 12); g.lineTo(20, 26); g.closePath(); g.fill(); g.stroke();
-  if (open) { g.fillStyle = '#1a1a10'; g.fillRect(-12, 34, 24, 12); }
+  // rock mound the head grows out of
+  poly(g, [[-92, -30], [-66, -66], [-20, -82], [24, -80], [68, -64], [92, -30], [70, 2], [-70, 2]], '#183029');
+  poly(g, [[-66, -66], [-20, -82], [-6, -40], [-50, -30]], '#21403a');
+  poly(g, [[24, -80], [68, -64], [52, -30], [10, -42]], '#132722');
+  // swept-back horns
+  [-1, 1].forEach(s => {
+    poly(g, [[s * 20, -34], [s * 56, -54], [s * 72, -86], [s * 50, -106], [s * 58, -80], [s * 42, -60], [s * 12, -44]], '#2b2822');
+    poly(g, [[s * 20, -34], [s * 56, -54], [s * 72, -86], [s * 64, -84], [s * 50, -60], [s * 16, -40]], '#4a453b');
+  });
+  const L = '#f3f5ec', M = '#d4dac9', D = '#a9b29e', DD = '#86907b';
+  // skull planes, lit from the top-left
+  poly(g, [[-38, -34], [0, -52], [38, -34], [0, -24]], L);
+  poly(g, [[-38, -34], [0, -24], [-6, 12], [-32, 4]], M);
+  poly(g, [[38, -34], [0, -24], [6, 12], [32, 4]], D);
+  poly(g, [[-32, 4], [-6, 12], [-10, 40], [-24, 30]], M);
+  poly(g, [[32, 4], [6, 12], [10, 40], [24, 30]], DD);
+  poly(g, [[-6, 12], [6, 12], [10, 40], [-10, 40]], L);
+  // crystal growths
+  shard(g, -15, -40, 22, 6, -.35); shard(g, 0, -47, 32, 7, 0); shard(g, 15, -40, 22, 6, .35);
+  shard(g, -33, -18, 15, 5, -.9); shard(g, 33, -18, 15, 5, .9);
+  // eye sockets with a glowing pupil
+  poly(g, [[-30, -10], [-11, -5], [-13, 5], [-27, 3]], '#121a0b');
+  poly(g, [[30, -10], [11, -5], [13, 5], [27, 3]], '#121a0b');
+  [-19, 19].forEach(ex => {
+    const eg = g.createRadialGradient(ex, -1, 0, ex, -1, 9);
+    eg.addColorStop(0, 'rgba(230,255,120,.9)'); eg.addColorStop(1, 'rgba(230,255,120,0)');
+    g.fillStyle = eg; g.beginPath(); g.arc(ex, -1, 9, 0, 7); g.fill();
+    g.fillStyle = '#f0ff9a'; g.beginPath(); g.arc(ex, -1, 2.5, 0, 7); g.fill();
+  });
+  // nostrils
+  poly(g, [[-6, 32], [-2, 30], [-3, 36]], '#5c6650'); poly(g, [[6, 32], [2, 30], [3, 36]], '#5c6650');
+  // jaw (drops open when it attacks, with a glow in the attack's colour)
+  const jy = open * 12;
+  if (open) {
+    poly(g, [[-15, 38], [15, 38], [12, 46 + jy], [-12, 46 + jy]], '#10160a');
+    const mc = S.style === 'magic' ? look.magic.core : look.ranged.core;
+    const mg = g.createRadialGradient(0, 42 + jy / 2, 0, 0, 42 + jy / 2, 16);
+    mg.addColorStop(0, mc); mg.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = mg; g.beginPath(); g.arc(0, 42 + jy / 2, 16, 0, 7); g.fill();
+  }
+  poly(g, [[-24, 32], [24, 32], [17, 56 + jy], [-17, 56 + jy]], M);
+  poly(g, [[0, 32], [24, 32], [17, 56 + jy], [0, 56 + jy]], D);
+  g.fillStyle = '#f7f8f1';
+  for (let i = -3; i <= 3; i++) poly(g, [[i * 5 - 2, 34 + jy * .2], [i * 5 + 2, 34 + jy * .2], [i * 5, 39 + jy * .2]], '#f7f8f1');
   g.restore();
   const fl = (now - S.turnFlash) / 600;
   if (S.turnFlash && fl < 1) {
     g.globalAlpha = 1 - fl; g.strokeStyle = '#ffff00'; g.lineWidth = 3;
-    g.beginPath(); g.arc(HEAD.x, HEAD.y + 6, 62 + fl * 14, 0, 7); g.stroke(); g.globalAlpha = 1;
+    g.beginPath(); g.arc(HEAD.x, HEAD.y + 6, 66 + fl * 14, 0, 7); g.stroke(); g.globalAlpha = 1;
   }
 }
 
@@ -1926,29 +2061,36 @@ function drawHand(g, side) {
   const h = S.hands[side]; const p = handPos(side);
   if (S.raid && (S.headPhase || S.transition)) return;
   const mirror = side === 2 ? -1 : 1;
-  // rock housing
-  g.fillStyle = '#1f3630'; g.beginPath(); g.ellipse(p.x, p.y - 44, 74, 40, 0, 0, 7); g.fill();
-  g.save(); g.translate(p.x, p.y); g.scale(mirror, 1); g.globalAlpha = h.hp > 0 ? 1 : .35;
-  const bone = g.createLinearGradient(0, -40, 0, 40);
-  bone.addColorStop(0, '#f2f3ec'); bone.addColorStop(1, '#bfc6b4');
-  g.fillStyle = bone; g.strokeStyle = '#6f7a66'; g.lineWidth = 2;
+  // faceted rock the claw comes out of
+  g.save(); g.translate(p.x, p.y); g.scale(mirror, 1);
+  poly(g, [[-70, -40], [-48, -78], [0, -88], [50, -76], [72, -40], [40, -24], [-40, -24]], '#183029');
+  poly(g, [[-48, -78], [0, -88], [-4, -50], [-40, -44]], '#21403a');
+  shard(g, -44, -70, 20, 6, -.5); shard(g, 46, -66, 16, 5, .6);
+  g.globalAlpha = h.hp > 0 ? 1 : .35;
+  const L = '#f1f3ea', M = '#d2d8c7', D = '#a5ae9a', T = '#24241f';
+  // forearm
+  poly(g, [[-18, -56], [18, -56], [22, -18], [-22, -18]], M);
+  poly(g, [[0, -56], [18, -56], [22, -18], [0, -18]], D);
   if (h.clench) {
-    g.beginPath(); g.roundRect ? g.roundRect(-28, -26, 56, 46, 16) : g.rect(-28, -26, 56, 46); g.fill(); g.stroke();
-    g.beginPath(); [-12, 0, 12].forEach(x => { g.moveTo(x, 0); g.lineTo(x, 18); }); g.stroke();
+    // fist
+    poly(g, [[-30, -22], [30, -22], [34, 6], [24, 22], [-24, 22], [-34, 6]], L);
+    poly(g, [[0, -22], [30, -22], [34, 6], [24, 22], [0, 22]], D);
+    for (let i = 0; i < 4; i++) poly(g, [[-24 + i * 13, 10], [-14 + i * 13, 10], [-16 + i * 13, 22], [-22 + i * 13, 22]], i < 2 ? M : DD(D));
+    limb(g, 26, -10, 10, 4, 6, 5, M, D);
   } else {
-    // wrist + palm
-    g.beginPath(); g.moveTo(-16, -50); g.lineTo(16, -50); g.lineTo(22, -14); g.lineTo(-22, -14); g.closePath(); g.fill(); g.stroke();
-    g.beginPath(); g.ellipse(0, -10, 28, 16, 0, 0, 7); g.fill(); g.stroke();
-    // fingers with dark talons
-    [[-22, -4, -34, 30], [-9, 2, -12, 40], [5, 2, 6, 42], [18, -2, 26, 34]].forEach(([a, b, c, d]) => {
-      g.strokeStyle = '#d9ddd1'; g.lineWidth = 8; g.lineCap = 'round';
-      g.beginPath(); g.moveTo(a, b); g.quadraticCurveTo((a + c) / 2 - 3, (b + d) / 2, c, d); g.stroke();
-      g.strokeStyle = '#2a2a24'; g.lineWidth = 4;
-      g.beginPath(); g.moveTo(c, d); g.lineTo(c + (c < 0 ? -3 : 3), d + 9); g.stroke();
+    // palm
+    poly(g, [[-26, -22], [26, -22], [30, 0], [18, 10], [-18, 10], [-30, 0]], L);
+    poly(g, [[0, -22], [26, -22], [30, 0], [18, 10], [0, 10]], M);
+    // four jointed fingers with dark talons
+    [[-22, 4, -30, 22, -34, 38], [-8, 8, -10, 28, -12, 46], [6, 8, 6, 28, 6, 48], [20, 4, 26, 22, 30, 40]].forEach(([x1, y1, x2, y2, x3, y3]) => {
+      limb(g, x1, y1, x2, y2, 4.5, 4, L, D);
+      limb(g, x2, y2, x3, y3, 4, 3, M, D);
+      poly(g, [[x3 - 3, y3], [x3 + 3, y3], [x3 + (x3 < 0 ? -2 : 2), y3 + 11]], T);
     });
     // thumb
-    g.strokeStyle = '#d9ddd1'; g.lineWidth = 8; g.beginPath(); g.moveTo(26, -14); g.lineTo(40, 2); g.stroke();
-    g.strokeStyle = '#2a2a24'; g.lineWidth = 4; g.beginPath(); g.moveTo(40, 2); g.lineTo(46, 8); g.stroke();
+    limb(g, 26, -10, 40, 4, 5, 4, L, D);
+    limb(g, 40, 4, 46, 16, 4, 3, M, D);
+    poly(g, [[43, 16], [49, 16], [50, 26]], T);
   }
   g.restore();
   // OSRS-style health bar
@@ -1972,6 +2114,7 @@ function drawHand(g, side) {
   if (h.healUntil && S.tick < h.healUntil) osrsText(g, '∞', p.x + 40, p.y - 52, '#3ee04f', 30);
   if (S.wheels) osrsText(g, h.type === 'mage' ? 'Mage hand' : 'Melee hand', p.x, p.y - 76, h.type === 'mage' ? '#9fc4ff' : '#ff9a8e', 16);
 }
+function DD(c) { return c; }
 
 function drawPlayer(g, p, now) {
   const x = px(p), y = py(p);
@@ -1983,30 +2126,49 @@ function drawPlayer(g, p, now) {
   if (S.drip && S.drip.target === p) { g.fillStyle = '#9be03a'; for (let i = 0; i < 3; i++) { g.beginPath(); g.arc(x - 8 + i * 8, y + 4 + (now / 50 + i * 7) % 12, 2.5, 0, 7); g.fill(); } }
   // true tile
   if (p.you) { g.strokeStyle = '#00ffff'; g.lineWidth = 1.5; g.strokeRect(p.c * TW + 4, FLOOR_Y + p.r * TW + 4, TW - 8, TW - 8); }
-  g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.ellipse(x, y + 12, 12, 5, 0, 0, 7); g.fill();
-  // legs
-  g.fillStyle = p.you ? '#3a2a5a' : '#4a4a4a';
-  g.fillRect(x - 6, y + 2, 5, 11); g.fillRect(x + 1, y + 2, 5, 11);
-  // body (mage robe / melee armour)
-  g.fillStyle = p.you ? '#6a3fb0' : '#9a2a22';
-  g.beginPath(); g.moveTo(x - 10, y + 6); g.lineTo(x - 8, y - 12); g.lineTo(x + 8, y - 12); g.lineTo(x + 10, y + 6); g.closePath(); g.fill();
-  g.strokeStyle = '#000'; g.lineWidth = 1; g.stroke();
-  // head
-  g.fillStyle = '#d9a77a'; g.beginPath(); g.arc(x, y - 17, 6, 0, 7); g.fill(); g.stroke();
-  if (p.you) { g.fillStyle = '#4b2a85'; g.beginPath(); g.moveTo(x - 8, y - 19); g.lineTo(x, y - 32); g.lineTo(x + 8, y - 19); g.closePath(); g.fill(); }
-  else { g.fillStyle = '#9aa0a6'; g.beginPath(); g.arc(x, y - 19, 6.5, Math.PI, 0); g.fill(); }
-  // weapon
-  g.strokeStyle = p.you ? '#c8a46a' : '#cfd4d8'; g.lineWidth = 2;
-  g.beginPath(); g.moveTo(x + 10, y + 4); g.lineTo(x + 14, y - 18); g.stroke();
+  g.fillStyle = 'rgba(0,0,0,.4)'; g.beginPath(); g.ellipse(x, y + 13, 13, 5, 0, 0, 7); g.fill();
+  const skin = '#d1a079', skinD = '#a97b58';
+  if (p.you) {
+    // mage: robe, hat, staff with a glowing orb
+    poly(g, [[x - 5, y + 2], [x - 1, y + 2], [x - 1, y + 13], [x - 6, y + 13]], '#2a1d40');
+    poly(g, [[x + 1, y + 2], [x + 5, y + 2], [x + 6, y + 13], [x + 1, y + 13]], '#22172f');
+    poly(g, [[x - 11, y + 8], [x - 7, y - 12], [x, y - 12], [x, y + 8]], '#7547c2');
+    poly(g, [[x, y - 12], [x + 7, y - 12], [x + 11, y + 8], [x, y + 8]], '#57319a');
+    poly(g, [[x - 11, y + 8], [x + 11, y + 8], [x + 10, y + 11], [x - 10, y + 11]], '#e0c25a');
+    limb(g, x - 8, y - 10, x - 12, y + 2, 2.5, 2.2, '#7547c2', '#57319a');
+    limb(g, x + 8, y - 10, x + 12, y - 1, 2.5, 2.2, '#57319a', '#432578');
+    poly(g, [[x - 5, y - 21], [x + 5, y - 21], [x + 5, y - 13], [x - 5, y - 13]], skin);
+    poly(g, [[x, y - 21], [x + 5, y - 21], [x + 5, y - 13], [x, y - 13]], skinD);
+    poly(g, [[x - 9, y - 20], [x + 9, y - 20], [x + 1, y - 37]], '#4a2a86');
+    poly(g, [[x + 1, y - 37], [x + 9, y - 20], [x + 1, y - 20]], '#37206a');
+    g.strokeStyle = '#8a5a2b'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(x + 13, y + 10); g.lineTo(x + 15, y - 22); g.stroke();
+    const og = g.createRadialGradient(x + 15, y - 24, 0, x + 15, y - 24, 7);
+    og.addColorStop(0, '#e6f6ff'); og.addColorStop(1, 'rgba(120,190,255,0)');
+    g.fillStyle = og; g.beginPath(); g.arc(x + 15, y - 24, 7, 0, 7); g.fill();
+  } else {
+    // melee: dark armour, red cape, helm, big blade
+    poly(g, [[x - 12, y - 10], [x + 12, y - 10], [x + 14, y + 10], [x - 14, y + 10]], '#7a1d1d');
+    poly(g, [[x - 5, y + 2], [x - 1, y + 2], [x - 1, y + 13], [x - 6, y + 13]], '#2c2f33');
+    poly(g, [[x + 1, y + 2], [x + 5, y + 2], [x + 6, y + 13], [x + 1, y + 13]], '#1f2225');
+    poly(g, [[x - 10, y + 4], [x - 9, y - 13], [x, y - 13], [x, y + 4]], '#5c6369');
+    poly(g, [[x, y - 13], [x + 9, y - 13], [x + 10, y + 4], [x, y + 4]], '#3c4146');
+    limb(g, x - 9, y - 11, x - 13, y + 1, 3, 2.6, '#5c6369', '#3c4146');
+    limb(g, x + 9, y - 11, x + 13, y - 2, 3, 2.6, '#3c4146', '#2c3034');
+    poly(g, [[x - 6, y - 24], [x + 6, y - 24], [x + 6, y - 13], [x - 6, y - 13]], '#6b7278');
+    poly(g, [[x, y - 24], [x + 6, y - 24], [x + 6, y - 13], [x, y - 13]], '#4a5056');
+    g.fillStyle = '#ff5a3a'; g.fillRect(x - 4, y - 19, 8, 2);
+    g.strokeStyle = '#7a5a34'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(x + 13, y + 6); g.lineTo(x + 16, y - 26); g.stroke();
+    poly(g, [[x + 16, y - 26], [x + 2, y - 30], [x - 6, y - 24], [x + 4, y - 26]], '#cfd6dc');
+  }
   // HP bar when recently hit
   if (p.you && now < p.hitUntil) {
-    g.fillStyle = '#ff0000'; g.fillRect(x - 15, y - 44, 30, 5);
-    g.fillStyle = '#00ff00'; g.fillRect(x - 15, y - 44, 30 * S.hp / 99, 5);
+    g.fillStyle = '#ff0000'; g.fillRect(x - 15, y - 46, 30, 5);
+    g.fillStyle = '#00ff00'; g.fillRect(x - 15, y - 46, 30 * S.hp / 99, 5);
   }
-  if (p.you && S.prayer) drawOverhead(g, S.prayer, x, y - 56);
-  if (p.say && now < p.say.until) osrsText(g, p.say.text, x, y - 66, '#ffff00', 20);
+  if (p.you && S.prayer) drawOverhead(g, S.prayer, x, y - 58);
+  if (p.say && now < p.say.until) osrsText(g, p.say.text, x, y - 68, '#ffff00', 20);
   if (p.you && S.tick < S.boundUntil) { g.strokeStyle = '#ffe25a'; g.lineWidth = 2; g.beginPath(); g.arc(x, y - 4, 17, 0, 7); g.stroke(); }
-  if (S.wheels) osrsText(g, p.name, x, y + 26, '#ffffff', 15);
+  if (S.wheels) osrsText(g, p.name, x, y + 27, '#ffffff', 15);
 }
 
 function frame(now) {
